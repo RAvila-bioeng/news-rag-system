@@ -4,7 +4,11 @@ import com.ragnews.ingestion.config.SourceConfig;
 import com.ragnews.ingestion.config.SourceConfigurationLoader;
 import com.ragnews.ingestion.fetcher.NewsApiFetcher;
 import com.ragnews.ingestion.model.NewsApiResponse;
+import com.ragnews.ingestion.parser.NewsApiArticleParser;
+import com.ragnews.ingestion.parser.NormalizedArticle;
 import jakarta.inject.Singleton;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -12,18 +16,23 @@ import java.util.Map;
 @Singleton
 public class IngestionService {
 
+    private static final Logger LOG = LoggerFactory.getLogger(IngestionService.class);
+
     private final SourceConfigurationLoader sourceConfigurationLoader;
     private final NewsApiFetcher newsApiFetcher;
+    private final NewsApiArticleParser newsApiArticleParser;
 
     public IngestionService(
             SourceConfigurationLoader sourceConfigurationLoader,
-            NewsApiFetcher newsApiFetcher
+            NewsApiFetcher newsApiFetcher,
+            NewsApiArticleParser newsApiArticleParser
     ) {
         this.sourceConfigurationLoader = sourceConfigurationLoader;
         this.newsApiFetcher = newsApiFetcher;
+        this.newsApiArticleParser = newsApiArticleParser;
     }
 
-    public Map<String, String> runIngestion() {
+    public Map<String, Object> runIngestion() {
         List<SourceConfig> sources = sourceConfigurationLoader.loadSources();
 
         SourceConfig newsApiSource = sources.stream()
@@ -37,11 +46,22 @@ public class IngestionService {
                 ? 0
                 : response.getArticles().size();
 
+        List<NormalizedArticle> normalizedArticles =
+                newsApiArticleParser.parse(response, newsApiSource.getName());
+
+        LOG.info(
+                "Fetched {} articles from {} and normalized {} articles",
+                fetchedCount,
+                newsApiSource.getName(),
+                normalizedArticles.size()
+        );
+
         return Map.of(
                 "status", "ok",
                 "source", newsApiSource.getName(),
-                "fetchedCount", String.valueOf(fetchedCount),
-                "totalResults", String.valueOf(response.getTotalResults())
+                "fetchedCount", fetchedCount,
+                "normalizedCount", normalizedArticles.size(),
+                "totalResults", response.getTotalResults()
         );
     }
 }

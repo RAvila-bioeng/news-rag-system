@@ -11,7 +11,6 @@ import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.scheduling.TaskExecutors;
 
 @ExecuteOn(TaskExecutors.BLOCKING)
-
 @Controller("/ingestion")
 public class IngestionController {
 
@@ -22,7 +21,7 @@ public class IngestionController {
     }
 
     @Post(value = "/run", consumes = MediaType.ALL)
-    public Map<String, String> runIngestion() {
+    public Map<String, Object> runIngestion() {
         return ingestionService.runIngestion();
     }
 }
