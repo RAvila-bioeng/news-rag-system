@@ -7,6 +7,11 @@ import io.micronaut.http.annotation.Post;
 
 import java.util.Map;
 
+import io.micronaut.scheduling.annotation.ExecuteOn;
+import io.micronaut.scheduling.TaskExecutors;
+
+@ExecuteOn(TaskExecutors.BLOCKING)
+
 @Controller("/ingestion")
 public class IngestionController {
 
