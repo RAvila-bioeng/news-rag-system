@@ -1,10 +1,10 @@
 package com.ragnews.ingestion.service;
 
-import org.springframework.stereotype.Service;
+import jakarta.inject.Singleton;
 
 import java.util.Map;
 
-@Service
+@Singleton
 public class IngestionService {
 
     public Map<String, String> runIngestion() {

@@ -1,12 +1,13 @@
 package com.ragnews.ingestion.web;
 
 import com.ragnews.ingestion.service.IngestionService;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RestController;
+import io.micronaut.http.MediaType;
+import io.micronaut.http.annotation.Controller;
+import io.micronaut.http.annotation.Post;
 
 import java.util.Map;
 
-@RestController
+@Controller("/ingestion")
 public class IngestionController {
 
     private final IngestionService ingestionService;
@@ -15,7 +16,7 @@ public class IngestionController {
         this.ingestionService = ingestionService;
     }
 
-    @PostMapping("/ingestion/run")
+    @Post(value = "/run", consumes = MediaType.ALL)
     public Map<String, String> runIngestion() {
         return ingestionService.runIngestion();
     }

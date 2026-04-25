@@ -1,6 +1,5 @@
-server:
-  port: 8081
-
-spring:
+micronaut:
   application:
     name: news-ingestion-service
+  server:
+    port: 8081
