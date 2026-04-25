@@ -1,9 +1,7 @@
 sources:
   - name: NewsAPI
-    enabled: true
     url: https://newsapi.org/v2/top-headlines
     params:
       country: us
       apiKey: ${NEWS_API_KEY}
-    category: general
     schedule: "0 0 8 * * ?"
