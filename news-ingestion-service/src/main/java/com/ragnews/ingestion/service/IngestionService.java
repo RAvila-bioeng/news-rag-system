@@ -2,10 +2,12 @@ package com.ragnews.ingestion.service;
 
 import com.ragnews.ingestion.config.SourceConfig;
 import com.ragnews.ingestion.config.SourceConfigurationLoader;
+import com.ragnews.ingestion.enrichment.ArticleEnricher;
 import com.ragnews.ingestion.fetcher.NewsApiFetcher;
 import com.ragnews.ingestion.metrics.IngestionRunMetrics;
 import com.ragnews.ingestion.metrics.MetricsWriter;
 import com.ragnews.ingestion.model.NewsApiResponse;
+import com.ragnews.ingestion.model.ProcessedArticle;
 import com.ragnews.ingestion.parser.NewsApiArticleParser;
 import com.ragnews.ingestion.parser.NormalizedArticle;
 import jakarta.inject.Singleton;
@@ -24,17 +26,20 @@ public class IngestionService {
     private final SourceConfigurationLoader sourceConfigurationLoader;
     private final NewsApiFetcher newsApiFetcher;
     private final NewsApiArticleParser newsApiArticleParser;
+    private final ArticleEnricher articleEnricher;
     private final MetricsWriter metricsWriter;
 
     public IngestionService(
             SourceConfigurationLoader sourceConfigurationLoader,
             NewsApiFetcher newsApiFetcher,
             NewsApiArticleParser newsApiArticleParser,
+            ArticleEnricher articleEnricher,
             MetricsWriter metricsWriter
     ) {
         this.sourceConfigurationLoader = sourceConfigurationLoader;
         this.newsApiFetcher = newsApiFetcher;
         this.newsApiArticleParser = newsApiArticleParser;
+        this.articleEnricher = articleEnricher;
         this.metricsWriter = metricsWriter;
     }
 
@@ -57,35 +62,39 @@ public class IngestionService {
 
             List<NormalizedArticle> normalizedArticles =
                     newsApiArticleParser.parse(response, newsApiSource.getName());
+            List<ProcessedArticle> processedArticles = articleEnricher.enrich(normalizedArticles);
 
             LOG.info(
-                    "Fetched {} articles from {} and normalized {} articles",
+                    "Fetched {} articles from {}, normalized {} articles, and enriched {} articles",
                     fetchedCount,
                     newsApiSource.getName(),
-                    normalizedArticles.size()
+                    normalizedArticles.size(),
+                    processedArticles.size()
             );
 
-            metricsWriter.write(new IngestionRunMetrics(
+            IngestionRunMetrics metrics = IngestionRunMetrics.successfulRun(
                     Instant.now(),
                     newsApiSource.getName(),
-                    "SUCCESS",
                     response.getStatus(),
                     response.getTotalResults(),
                     fetchedCount,
                     normalizedArticles.size(),
                     fetchedCount - normalizedArticles.size(),
-                    0,
-                    0,
-                    0,
-                    0
-            ));
+                    processedArticles
+            );
+
+            metricsWriter.write(metrics);
 
             return Map.of(
                     "status", "ok",
                     "source", newsApiSource.getName(),
                     "fetchedCount", fetchedCount,
                     "normalizedCount", normalizedArticles.size(),
-                    "totalResults", response.getTotalResults()
+                    "processedCount", processedArticles.size(),
+                    "totalResults", response.getTotalResults(),
+                    "positiveCount", metrics.positiveCount(),
+                    "negativeCount", metrics.negativeCount(),
+                    "neutralCount", metrics.neutralCount()
             );
         } catch (Exception e) {
             String sourceName = newsApiSource == null ? "NewsAPI" : newsApiSource.getName();
