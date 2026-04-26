@@ -91,6 +91,7 @@ public class IngestionService {
                     "fetchedCount", fetchedCount,
                     "normalizedCount", normalizedArticles.size(),
                     "processedCount", processedArticles.size(),
+                    "embeddedCount", metrics.embeddedCount(),
                     "totalResults", response.getTotalResults(),
                     "positiveCount", metrics.positiveCount(),
                     "negativeCount", metrics.negativeCount(),
@@ -110,6 +111,7 @@ public class IngestionService {
                     0,
                     0,
                     1,
+                    0,
                     0,
                     0,
                     0

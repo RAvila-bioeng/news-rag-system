@@ -18,6 +18,7 @@ public record IngestionRunMetrics(
         int normalizedCount,
         int discardedCount,
         int failedRequests,
+        int embeddedCount,
         int positiveCount,
         int negativeCount,
         int neutralCount
@@ -42,6 +43,7 @@ public record IngestionRunMetrics(
                 normalizedCount,
                 discardedCount,
                 0,
+                countEmbedded(processedArticles),
                 countSentiment(processedArticles, Sentiment.POSITIVE),
                 countSentiment(processedArticles, Sentiment.NEGATIVE),
                 countSentiment(processedArticles, Sentiment.NEUTRAL)
@@ -55,6 +57,16 @@ public record IngestionRunMetrics(
 
         return (int) articles.stream()
                 .filter(article -> article.sentiment() == sentiment)
+                .count();
+    }
+
+    private static int countEmbedded(List<ProcessedArticle> articles) {
+        if (articles == null) {
+            return 0;
+        }
+
+        return (int) articles.stream()
+                .filter(article -> article.embedding() != null && !article.embedding().isEmpty())
                 .count();
     }
 }
