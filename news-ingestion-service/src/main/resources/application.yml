@@ -3,3 +3,7 @@ micronaut:
     name: news-ingestion-service
   server:
     port: 8081
+
+opensearch:
+  url: http://localhost:9200
+  index: news_article

@@ -10,11 +10,13 @@ import com.ragnews.ingestion.model.NewsApiResponse;
 import com.ragnews.ingestion.model.ProcessedArticle;
 import com.ragnews.ingestion.parser.NewsApiArticleParser;
 import com.ragnews.ingestion.parser.NormalizedArticle;
+import com.ragnews.ingestion.storage.ArticleIndexer;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +29,7 @@ public class IngestionService {
     private final NewsApiFetcher newsApiFetcher;
     private final NewsApiArticleParser newsApiArticleParser;
     private final ArticleEnricher articleEnricher;
+    private final ArticleIndexer articleIndexer;
     private final MetricsWriter metricsWriter;
 
     public IngestionService(
@@ -34,12 +37,14 @@ public class IngestionService {
             NewsApiFetcher newsApiFetcher,
             NewsApiArticleParser newsApiArticleParser,
             ArticleEnricher articleEnricher,
+            ArticleIndexer articleIndexer,
             MetricsWriter metricsWriter
     ) {
         this.sourceConfigurationLoader = sourceConfigurationLoader;
         this.newsApiFetcher = newsApiFetcher;
         this.newsApiArticleParser = newsApiArticleParser;
         this.articleEnricher = articleEnricher;
+        this.articleIndexer = articleIndexer;
         this.metricsWriter = metricsWriter;
     }
 
@@ -63,13 +68,15 @@ public class IngestionService {
             List<NormalizedArticle> normalizedArticles =
                     newsApiArticleParser.parse(response, newsApiSource.getName());
             List<ProcessedArticle> processedArticles = articleEnricher.enrich(normalizedArticles);
+            int indexedCount = articleIndexer.indexArticles(processedArticles);
 
             LOG.info(
-                    "Fetched {} articles from {}, normalized {} articles, and enriched {} articles",
+                    "Fetched {} articles from {}, normalized {} articles, enriched {} articles, and indexed {} articles",
                     fetchedCount,
                     newsApiSource.getName(),
                     normalizedArticles.size(),
-                    processedArticles.size()
+                    processedArticles.size(),
+                    indexedCount
             );
 
             IngestionRunMetrics metrics = IngestionRunMetrics.successfulRun(
@@ -80,23 +87,25 @@ public class IngestionService {
                     fetchedCount,
                     normalizedArticles.size(),
                     fetchedCount - normalizedArticles.size(),
+                    indexedCount,
                     processedArticles
             );
 
             metricsWriter.write(metrics);
 
-            return Map.of(
-                    "status", "ok",
-                    "source", newsApiSource.getName(),
-                    "fetchedCount", fetchedCount,
-                    "normalizedCount", normalizedArticles.size(),
-                    "processedCount", processedArticles.size(),
-                    "embeddedCount", metrics.embeddedCount(),
-                    "totalResults", response.getTotalResults(),
-                    "positiveCount", metrics.positiveCount(),
-                    "negativeCount", metrics.negativeCount(),
-                    "neutralCount", metrics.neutralCount()
-            );
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("status", "ok");
+            result.put("source", newsApiSource.getName());
+            result.put("fetchedCount", fetchedCount);
+            result.put("normalizedCount", normalizedArticles.size());
+            result.put("processedCount", processedArticles.size());
+            result.put("embeddedCount", metrics.embeddedCount());
+            result.put("indexedCount", metrics.indexedCount());
+            result.put("totalResults", response.getTotalResults());
+            result.put("positiveCount", metrics.positiveCount());
+            result.put("negativeCount", metrics.negativeCount());
+            result.put("neutralCount", metrics.neutralCount());
+            return result;
         } catch (Exception e) {
             String sourceName = newsApiSource == null ? "NewsAPI" : newsApiSource.getName();
             LOG.error("Ingestion run failed for source {}", sourceName, e);
@@ -111,6 +120,7 @@ public class IngestionService {
                     0,
                     0,
                     1,
+                    0,
                     0,
                     0,
                     0,

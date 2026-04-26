@@ -19,6 +19,7 @@ public record IngestionRunMetrics(
         int discardedCount,
         int failedRequests,
         int embeddedCount,
+        int indexedCount,
         int positiveCount,
         int negativeCount,
         int neutralCount
@@ -31,8 +32,11 @@ public record IngestionRunMetrics(
             int fetchedCount,
             int normalizedCount,
             int discardedCount,
+            int indexedCount,
             List<ProcessedArticle> processedArticles
     ) {
+        int processedCount = processedArticles == null ? 0 : processedArticles.size();
+
         return new IngestionRunMetrics(
                 runAt,
                 source,
@@ -42,8 +46,9 @@ public record IngestionRunMetrics(
                 fetchedCount,
                 normalizedCount,
                 discardedCount,
-                0,
+                Math.max(0, processedCount - indexedCount),
                 countEmbedded(processedArticles),
+                indexedCount,
                 countSentiment(processedArticles, Sentiment.POSITIVE),
                 countSentiment(processedArticles, Sentiment.NEGATIVE),
                 countSentiment(processedArticles, Sentiment.NEUTRAL)
