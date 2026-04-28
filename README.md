@@ -14,6 +14,105 @@ Current repository structure:
 - `config/sources.yaml`: external news source configuration
 - `docker-compose.yml`: local OpenSearch setup
 
+## Current MVP demo flow
+
+This is the current end-to-end demo path for the MVP:
+
+1. OpenSearch runs locally with Docker.
+2. `news-ingestion-service` fetches real NewsAPI articles, normalizes them, adds sentiment, generates 16-dimensional deterministic embeddings, indexes them into OpenSearch, and writes metrics.
+3. `search-service` receives a query, generates a compatible 16-dimensional query embedding, performs k-NN search in OpenSearch, and returns matching news articles.
+
+### Prerequisites
+
+- Java 17+
+- Maven
+- Docker Desktop
+- A `NEWS_API_KEY` environment variable with a valid NewsAPI.org API key
+
+### 1. Start OpenSearch
+
+```powershell
+docker compose up -d opensearch
+```
+
+Optional health check:
+
+```powershell
+curl.exe http://localhost:9200
+```
+
+### 2. Create or recreate the index
+
+```powershell
+.\scripts\opensearch\create-news-article-index.ps1 -Recreate
+```
+
+This creates the `news_article` index with k-NN enabled and a 16-dimensional `embedding` vector.
+
+### 3. Run the ingestion service
+
+In one terminal:
+
+```powershell
+mvn -f news-ingestion-service/pom.xml mn:run
+```
+
+### 4. Trigger ingestion
+
+In another terminal:
+
+```powershell
+curl.exe -X POST http://localhost:8081/ingestion/run
+```
+
+### 5. Check indexed document count
+
+```powershell
+curl.exe http://localhost:9200/news_article/_count
+```
+
+### 6. Run the search service
+
+In a separate terminal:
+
+```powershell
+mvn -f search-service/pom.xml mn:run
+```
+
+### 7. Search
+
+```powershell
+curl.exe "http://localhost:8082/search?q=iran"
+```
+
+Expected response shape:
+
+```json
+{
+  "query": "iran",
+  "resultCount": 5,
+  "results": [
+    {
+      "title": "...",
+      "source": "...",
+      "url": "...",
+      "sentiment": "...",
+      "timestamp": "...",
+      "score": 0.38
+    }
+  ]
+}
+```
+
+`resultCount` depends on how many articles are currently indexed and how OpenSearch scores the query.
+
+### MVP notes
+
+- The current sentiment analyzer is intentionally simple and modular. It validates the pipeline while keeping the implementation easy to explain.
+- The current embedding generator is deterministic and local. It is intended to prove the architecture and OpenSearch vector search flow without requiring an external model.
+- Semantic quality can be improved later by replacing the embedding generator with a real embedding model.
+- The system currently stores one full article as one OpenSearch document, without chunking, according to the agreed MVP scope.
+
 ## Local OpenSearch
 
 Start OpenSearch:
