@@ -7,3 +7,8 @@ micronaut:
 opensearch:
   url: http://localhost:9200
   index: news_article
+
+ingestion:
+  scheduler:
+    enabled: true
+    cron: "0 0 8 * * ?"
