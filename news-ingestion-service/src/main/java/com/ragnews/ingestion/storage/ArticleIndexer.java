@@ -6,5 +6,5 @@ import java.util.List;
 
 public interface ArticleIndexer {
 
-    int indexArticles(List<ProcessedArticle> articles);
+    IndexingSummary indexArticles(List<ProcessedArticle> articles);
 }

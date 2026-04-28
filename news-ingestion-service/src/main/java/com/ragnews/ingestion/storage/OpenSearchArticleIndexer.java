@@ -3,6 +3,7 @@ package com.ragnews.ingestion.storage;
 import com.ragnews.ingestion.model.ProcessedArticle;
 import com.ragnews.ingestion.parser.NormalizedArticle;
 import io.micronaut.context.annotation.Value;
+import io.micronaut.core.type.Argument;
 import io.micronaut.serde.ObjectMapper;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -40,22 +41,34 @@ public class OpenSearchArticleIndexer implements ArticleIndexer {
     }
 
     @Override
-    public int indexArticles(List<ProcessedArticle> articles) {
+    public IndexingSummary indexArticles(List<ProcessedArticle> articles) {
         if (articles == null || articles.isEmpty()) {
-            return 0;
+            return new IndexingSummary(0, 0, 0);
         }
 
         int indexedCount = 0;
+        int createdCount = 0;
+        int updatedCount = 0;
+
         for (ProcessedArticle article : articles) {
-            if (indexArticle(article)) {
+            String operationResult = indexArticle(article);
+            if (operationResult != null) {
                 indexedCount++;
+
+                if ("created".equals(operationResult)) {
+                    createdCount++;
+                } else if ("updated".equals(operationResult)) {
+                    updatedCount++;
+                } else {
+                    LOG.warn("OpenSearch returned unexpected successful indexing result: {}", operationResult);
+                }
             }
         }
 
-        return indexedCount;
+        return new IndexingSummary(indexedCount, createdCount, updatedCount);
     }
 
-    private boolean indexArticle(ProcessedArticle processedArticle) {
+    private String indexArticle(ProcessedArticle processedArticle) {
         try {
             String documentId = generateDocumentId(processedArticle);
             NormalizedArticle article = processedArticle.article();
@@ -67,8 +80,14 @@ public class OpenSearchArticleIndexer implements ArticleIndexer {
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                LOG.debug("Indexed article '{}' with document ID {}", article.title(), documentId);
-                return true;
+                String operationResult = parseOperationResult(response.body());
+                LOG.debug(
+                        "Indexed article '{}' with document ID {} and result {}",
+                        article.title(),
+                        documentId,
+                        operationResult
+                );
+                return operationResult;
             }
 
             LOG.error(
@@ -76,18 +95,27 @@ public class OpenSearchArticleIndexer implements ArticleIndexer {
                     response.statusCode(),
                     response.body()
             );
-            return false;
+            return null;
         } catch (IOException e) {
             LOG.error("Could not serialize or send article to OpenSearch", e);
-            return false;
+            return null;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             LOG.error("OpenSearch indexing request was interrupted", e);
-            return false;
+            return null;
         } catch (RuntimeException e) {
             LOG.error("Unexpected error while indexing article in OpenSearch", e);
-            return false;
+            return null;
         }
+    }
+
+    private String parseOperationResult(String responseBody) throws IOException {
+        Map<String, Object> response = objectMapper.readValue(
+                responseBody,
+                Argument.mapOf(String.class, Object.class)
+        );
+        Object result = response.get("result");
+        return result == null ? "unknown" : result.toString();
     }
 
     private String generateDocumentId(ProcessedArticle processedArticle) {
