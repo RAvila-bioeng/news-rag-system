@@ -1,3 +1,15 @@
-spring:
+micronaut:
   application:
     name: search-service
+  server:
+    port: 8082
+  serde:
+    serialization:
+      inclusion: NON_NULL
+
+opensearch:
+  url: http://localhost:9200
+  index: news_article
+
+search:
+  default-top-k: 5
