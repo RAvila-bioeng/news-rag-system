@@ -13,6 +13,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,7 +27,7 @@ public class OpenSearchArticleIndexer implements ArticleIndexer {
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
-    private final URI documentUri;
+    private final String documentUrl;
 
     public OpenSearchArticleIndexer(
             ObjectMapper objectMapper,
@@ -33,7 +36,7 @@ public class OpenSearchArticleIndexer implements ArticleIndexer {
     ) {
         this.httpClient = HttpClient.newHttpClient();
         this.objectMapper = objectMapper;
-        this.documentUri = URI.create(openSearchUrl + "/" + indexName + "/_doc");
+        this.documentUrl = openSearchUrl + "/" + indexName + "/_doc";
     }
 
     @Override
@@ -54,14 +57,17 @@ public class OpenSearchArticleIndexer implements ArticleIndexer {
 
     private boolean indexArticle(ProcessedArticle processedArticle) {
         try {
+            String documentId = generateDocumentId(processedArticle);
+            NormalizedArticle article = processedArticle.article();
             String documentJson = objectMapper.writeValueAsString(toDocument(processedArticle));
-            HttpRequest request = HttpRequest.newBuilder(documentUri)
+            HttpRequest request = HttpRequest.newBuilder(URI.create(documentUrl + "/" + documentId))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(documentJson))
+                    .PUT(HttpRequest.BodyPublishers.ofString(documentJson))
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                LOG.debug("Indexed article '{}' with document ID {}", article.title(), documentId);
                 return true;
             }
 
@@ -81,6 +87,33 @@ public class OpenSearchArticleIndexer implements ArticleIndexer {
         } catch (RuntimeException e) {
             LOG.error("Unexpected error while indexing article in OpenSearch", e);
             return false;
+        }
+    }
+
+    private String generateDocumentId(ProcessedArticle processedArticle) {
+        NormalizedArticle article = processedArticle.article();
+        String idSource = article.url();
+
+        if (idSource == null || idSource.isBlank()) {
+            idSource = article.source() + "|" + article.title() + "|" + article.publishedAt();
+        }
+
+        return sha256Hex(idSource.trim());
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+
+            for (byte b : hash) {
+                hex.append(String.format("%02x", b));
+            }
+
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm is not available", e);
         }
     }
 
