@@ -2,6 +2,7 @@ package com.ragnews.ingestion.embedding;
 
 import com.ragnews.ingestion.parser.NormalizedArticle;
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.context.annotation.Value;
 import jakarta.inject.Singleton;
 
 import java.util.ArrayList;
@@ -12,11 +13,19 @@ import java.util.Locale;
 @Requires(property = "embedding.provider", value = "simple-hash")
 public class SimpleHashEmbeddingGenerator implements EmbeddingGenerator {
 
-    public static final int DIMENSION = 16;
+    private final int dimensions;
+
+    public SimpleHashEmbeddingGenerator(@Value("${embedding.dimensions}") int dimensions) {
+        if (dimensions <= 0) {
+            throw new IllegalArgumentException("embedding.dimensions must be greater than zero");
+        }
+
+        this.dimensions = dimensions;
+    }
 
     @Override
     public List<Double> generate(NormalizedArticle article) {
-        double[] vector = new double[DIMENSION];
+        double[] vector = new double[dimensions];
         String text = buildText(article);
 
         for (String token : text.split("[^a-z0-9]+")) {
@@ -25,7 +34,7 @@ public class SimpleHashEmbeddingGenerator implements EmbeddingGenerator {
             }
 
             int hash = token.hashCode();
-            int index = Math.floorMod(hash, DIMENSION);
+            int index = Math.floorMod(hash, dimensions);
             double direction = hash % 2 == 0 ? 1.0 : -1.0;
             vector[index] += direction;
         }

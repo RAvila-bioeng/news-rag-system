@@ -12,10 +12,9 @@ opensearch:
   index: news_article
 
 embedding:
-  provider: openai
-  model: text-embedding-3-small
-  dimensions: 384
-  api-key: ${OPENAI_API_KEY:}
+  provider: ${EMBEDDING_PROVIDER:openai}
+  dimensions: ${EMBEDDING_DIMENSIONS:384}
+  model: ${EMBEDDING_MODEL:text-embedding-3-small}
 
 search:
   default-top-k: 5

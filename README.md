@@ -29,6 +29,8 @@ This repository contains two Micronaut services plus a local OpenSearch setup:
 
 The MVP intentionally focuses on one news source implemented well. It stores each article as one full OpenSearch document with one embedding vector. Chunking is not implemented in this version.
 
+Embedding configuration is intentionally centralized in the root `.env` file. The ingestion service creates article embeddings and indexes them; the search service creates query embeddings. Both services must use the same provider and `embedding.dimensions` value for OpenSearch k-NN search to be meaningful.
+
 ## Architecture
 
 ```text
@@ -71,7 +73,7 @@ The MVP intentionally focuses on one news source implemented well. It stores eac
 - Loads source settings from `config/sources.yaml`.
 - Normalizes NewsAPI article fields into an internal article model.
 - Classifies each article as `POSITIVE`, `NEGATIVE`, or `NEUTRAL` using a simple keyword-based analyzer.
-- Generates deterministic 16-dimensional local embeddings for articles and queries.
+- Generates embeddings for articles and queries using a shared provider and dimension configuration.
 - Indexes articles into OpenSearch in the `news_article` index.
 - Tracks whether indexed documents were created or updated.
 - Persists ingestion metrics to `data/metrics/ingestion-metrics.json`.
@@ -87,12 +89,21 @@ The MVP intentionally focuses on one news source implemented well. It stores eac
 - PowerShell for the provided OpenSearch index script
 - A valid NewsAPI.org API key
 
-## Environment Variables
+## Environment And Embeddings
 
-The ingestion service requires:
+For local development, keep secrets and shared runtime settings in the root `.env` file. Both services load this file at startup.
 
-```powershell
-$env:NEWS_API_KEY = "your-newsapi-key"
+`config/sources.yaml` remains only for external news source configuration. The root `.env` is the local single source of truth for embedding provider, dimensions, and model.
+
+Minimal OpenAI configuration:
+
+```env
+NEWS_API_KEY=your-newsapi-key
+OPENAI_API_KEY=your-openai-api-key
+
+EMBEDDING_PROVIDER=openai
+EMBEDDING_DIMENSIONS=384
+EMBEDDING_MODEL=text-embedding-3-small
 ```
 
 `config/sources.yaml` uses this variable:
@@ -101,7 +112,20 @@ $env:NEWS_API_KEY = "your-newsapi-key"
 apiKey: ${NEWS_API_KEY}
 ```
 
-Do not commit real API keys. Keep secrets in your local shell environment.
+Supported embedding providers:
+
+- `openai`: uses `OPENAI_API_KEY`, `EMBEDDING_MODEL=text-embedding-3-small`, and `EMBEDDING_DIMENSIONS=384`.
+- `simple-hash`: deterministic local fallback for architecture validation, not high-quality semantic search.
+
+Simple-hash fallback configuration:
+
+```env
+EMBEDDING_PROVIDER=simple-hash
+EMBEDDING_DIMENSIONS=16
+EMBEDDING_MODEL=
+```
+
+Do not commit real API keys. Keep secrets in your local `.env` or shell environment.
 
 Useful default configuration values:
 
@@ -148,18 +172,35 @@ Delete and recreate the index:
 .\scripts\opensearch\create-news-article-index.ps1 -Recreate
 ```
 
+OpenSearch vector dimensions are fixed in the index mapping. OpenAI mode requires index dimension `384`; simple-hash mode requires index dimension `16`. Whenever `EMBEDDING_DIMENSIONS` changes, recreate the `news_article` index.
+
+The script reads the embedding dimension from `-EmbeddingDimension`, then `EMBEDDING_DIMENSIONS` in the shell, then root `.env`, and otherwise falls back to `384`.
+
+You can still pass the dimension explicitly:
+
+```powershell
+.\scripts\opensearch\create-news-article-index.ps1 -Recreate -EmbeddingDimension 16
+```
+
 The script creates:
 
 - index name: `news_article`
 - k-NN enabled: `true`
 - embedding field: `knn_vector`
-- embedding dimension: `16`
+- embedding dimension: read from `-EmbeddingDimension`, then `EMBEDDING_DIMENSIONS`, then `.env`, otherwise `384`
 - fields: `title`, `content`, `source`, `url`, `timestamp`, `sentiment`, `embedding`
 
 Verify the index exists:
 
 ```powershell
 curl.exe http://localhost:9200/news_article
+```
+
+Check the embedding vector length on an indexed document:
+
+```powershell
+$response = Invoke-RestMethod "http://localhost:9200/news_article/_search?size=1"
+$response.hits.hits[0]._source.embedding.Count
 ```
 
 ## Run news-ingestion-service
@@ -240,7 +281,7 @@ mvn -f search-service/pom.xml mn:run
 
 The service starts on port `8082`.
 
-It uses the same OpenSearch index and compatible 16-dimensional query embeddings.
+It uses the same OpenSearch index and the same embedding provider and dimensions as the ingestion service.
 
 ## Search With GET /search
 
@@ -341,7 +382,7 @@ Important per-run fields:
 ## Current MVP Limitations
 
 - Only NewsAPI is fully implemented as a source.
-- Embeddings are deterministic local hash embeddings, not model-quality semantic embeddings.
+- The `simple-hash` fallback embeddings are deterministic local hash embeddings, not model-quality semantic embeddings.
 - Sentiment is keyword-based and intentionally simple.
 - Articles are stored as full documents; there is no chunking in the MVP.
 - Search returns top-k semantic matches but does not include pagination.
@@ -351,7 +392,7 @@ Important per-run fields:
 
 ## Future Improvements
 
-- Replace deterministic embeddings with a real embedding model.
+- Improve or replace the fallback embedding implementation if local-only semantic quality becomes important.
 - Add a stronger sentiment model.
 - Add more sources through the existing source configuration shape.
 - Add chunking for long articles if semantic granularity becomes important.
@@ -366,10 +407,11 @@ Important per-run fields:
 
 Use this sequence for a clean interview/demo run.
 
-Set the API key:
+Compile both services:
 
 ```powershell
-$env:NEWS_API_KEY = "your-newsapi-key"
+mvn -f news-ingestion-service/pom.xml compile
+mvn -f search-service/pom.xml compile
 ```
 
 Start OpenSearch:
@@ -406,6 +448,13 @@ Check document count:
 
 ```powershell
 curl.exe http://localhost:9200/news_article/_count
+```
+
+Check the indexed embedding dimension:
+
+```powershell
+$response = Invoke-RestMethod "http://localhost:9200/news_article/_search?size=1"
+$response.hits.hits[0]._source.embedding.Count
 ```
 
 Start the search service from a third terminal:
