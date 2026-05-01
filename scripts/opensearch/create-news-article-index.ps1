@@ -1,5 +1,6 @@
 param(
-    [switch]$Recreate
+    [switch]$Recreate,
+    [int]$EmbeddingDimension = 384
 )
 
 $ErrorActionPreference = "Stop"
@@ -82,13 +83,15 @@ $Body = @'
       },
       "embedding": {
         "type": "knn_vector",
-        "dimension": 16
+        "dimension": EMBEDDING_DIMENSION_PLACEHOLDER
       }
     }
   }
 }
 '@
 
+$Body = $Body.Replace("EMBEDDING_DIMENSION_PLACEHOLDER", $EmbeddingDimension.ToString())
+
 Write-Host "Creating index '$IndexName'..."
 Invoke-RestMethod -Uri $IndexUrl -Method Put -ContentType "application/json" -Body $Body | Out-Null
-Write-Host "Index '$IndexName' created with k-NN enabled and 16-dimensional embeddings."
+Write-Host "Index '$IndexName' created with k-NN enabled and $EmbeddingDimension-dimensional embeddings."

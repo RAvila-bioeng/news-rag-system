@@ -1,11 +1,13 @@
 package com.ragnews.search.embedding;
 
+import io.micronaut.context.annotation.Requires;
 import jakarta.inject.Singleton;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 @Singleton
+@Requires(property = "embedding.provider", value = "simple-hash")
 public class SimpleHashEmbeddingGenerator implements EmbeddingGenerator {
 
     public static final int DIMENSION = 16;

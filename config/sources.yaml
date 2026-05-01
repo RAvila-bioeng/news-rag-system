@@ -3,6 +3,5 @@ sources:
     url: https://newsapi.org/v2/top-headlines
     params:
       country: us
-      pageSize: "10"
-      apiKey: ${NEWS_API_KEY}
+      pageSize: "50"
     schedule: "0 0 8 * * ?"

@@ -8,6 +8,12 @@ opensearch:
   url: http://localhost:9200
   index: news_article
 
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+  dimensions: 384
+  api-key: ${OPENAI_API_KEY:}
+
 ingestion:
   scheduler:
     enabled: true
