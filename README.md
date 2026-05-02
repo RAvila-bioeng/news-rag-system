@@ -27,7 +27,7 @@ This repository contains two Micronaut services plus a local OpenSearch setup:
 - `scripts/opensearch/create-news-article-index.ps1`: creates or recreates the local OpenSearch index.
 - `docker-compose.yml`: starts OpenSearch locally.
 
-The MVP intentionally focuses on one news source implemented well. It stores each article as one full OpenSearch document with one embedding vector. Chunking is not implemented in this version.
+The MVP intentionally focuses on one provider, NewsAPI.org, implemented well. The ingestion service can process multiple configured NewsAPI source entries, such as technology, business, and health feeds. It stores each article as one full OpenSearch document with one embedding vector. Chunking is not implemented in this version.
 
 Embedding configuration is intentionally centralized in the root `.env` file. The ingestion service creates article embeddings and indexes them; the search service creates query embeddings. Both services must use the same provider and `embedding.dimensions` value for OpenSearch k-NN search to be meaningful.
 
@@ -69,8 +69,8 @@ Embedding configuration is intentionally centralized in the root `.env` file. Th
 
 ## Current MVP Capabilities
 
-- Fetches real top-headline articles from NewsAPI.org.
-- Loads source settings from `config/sources.yaml`.
+- Fetches real top-headline articles from configured NewsAPI.org source entries.
+- Loads one or more source settings from `config/sources.yaml`.
 - Normalizes NewsAPI article fields into an internal article model.
 - Classifies each article as `POSITIVE`, `NEGATIVE`, or `NEUTRAL` using a simple keyword-based analyzer.
 - Generates embeddings for articles and queries using a shared provider and dimension configuration.
@@ -135,6 +135,41 @@ Index name:     news_article
 Ingestion API:  http://localhost:8081
 Search API:     http://localhost:8082
 ```
+
+## Multi-Source NewsAPI Configuration
+
+The MVP uses one external provider, NewsAPI.org, but `config/sources.yaml` can contain several NewsAPI source entries. Each entry uses the same fetcher and parser while changing request params such as `category`, `country`, `pageSize`, or `q`.
+
+Current example:
+
+```yaml
+sources:
+  - name: NewsAPI Technology
+    url: https://newsapi.org/v2/top-headlines
+    params:
+      country: us
+      category: technology
+      pageSize: "10"
+      apiKey: ${NEWS_API_KEY}
+
+  - name: NewsAPI Business
+    url: https://newsapi.org/v2/top-headlines
+    params:
+      country: us
+      category: business
+      pageSize: "10"
+      apiKey: ${NEWS_API_KEY}
+
+  - name: NewsAPI Health
+    url: https://newsapi.org/v2/top-headlines
+    params:
+      country: us
+      category: health
+      pageSize: "10"
+      apiKey: ${NEWS_API_KEY}
+```
+
+`POST /ingestion/run` processes all configured NewsAPI-compatible entries and returns aggregate totals plus a per-source summary.
 
 ## Start OpenSearch
 
@@ -232,22 +267,39 @@ Expected response shape:
 ```json
 {
   "status": "ok",
-  "source": "NewsAPI",
-  "fetchedCount": 10,
-  "normalizedCount": 10,
-  "processedCount": 10,
-  "embeddedCount": 10,
-  "indexedCount": 10,
-  "createdCount": 10,
-  "updatedCount": 0,
-  "totalResults": 34,
-  "positiveCount": 1,
-  "negativeCount": 2,
-  "neutralCount": 7
+  "sourceCount": 3,
+  "fetchedCount": 30,
+  "normalizedCount": 30,
+  "processedCount": 30,
+  "embeddedCount": 30,
+  "indexedCount": 30,
+  "createdCount": 24,
+  "updatedCount": 6,
+  "totalResults": 430,
+  "positiveCount": 4,
+  "negativeCount": 7,
+  "neutralCount": 19,
+  "sources": [
+    {
+      "source": "NewsAPI Technology",
+      "status": "ok",
+      "fetchedCount": 10,
+      "normalizedCount": 10,
+      "processedCount": 10,
+      "embeddedCount": 10,
+      "indexedCount": 10,
+      "createdCount": 10,
+      "updatedCount": 0,
+      "totalResults": 120,
+      "positiveCount": 1,
+      "negativeCount": 2,
+      "neutralCount": 7
+    }
+  ]
 }
 ```
 
-Counts depend on the current NewsAPI response and whether the same articles were indexed before.
+Counts depend on the current NewsAPI response, the configured source entries, and whether the same articles were indexed before.
 
 ## Validate OpenSearch Document Count
 
@@ -261,7 +313,7 @@ Expected response shape:
 
 ```json
 {
-  "count": 10
+  "count": 30
 }
 ```
 
@@ -347,7 +399,7 @@ For demo purposes, manual ingestion is the most predictable path because it prod
 
 ## Metrics
 
-After each ingestion run, the ingestion service appends a run entry to:
+After ingestion, the ingestion service appends source-level run entries to:
 
 ```text
 data/metrics/ingestion-metrics.json
@@ -356,12 +408,14 @@ data/metrics/ingestion-metrics.json
 The metrics file stores:
 
 - `lastRunAt`: timestamp of the latest recorded run.
-- `runs`: historical list of ingestion runs.
+- `runs`: historical list of source-level ingestion runs.
+
+With multiple configured NewsAPI source entries, one call to `POST /ingestion/run` appends one metrics entry per source. For example, technology, business, and health create three metrics entries while the HTTP response returns one aggregate summary.
 
 Important per-run fields:
 
 - `runAt`: when the run was recorded.
-- `source`: source name, currently `NewsAPI`.
+- `source`: configured source name, such as `NewsAPI Technology`.
 - `status`: `SUCCESS` or `FAILED`.
 - `upstreamStatus`: status returned by NewsAPI when available.
 - `totalResults`: total result count reported by NewsAPI.
@@ -381,7 +435,7 @@ Important per-run fields:
 
 ## Current MVP Limitations
 
-- Only NewsAPI is fully implemented as a source.
+- Only NewsAPI.org is fully implemented as an external provider.
 - The `simple-hash` fallback embeddings are deterministic local hash embeddings, not model-quality semantic embeddings.
 - Sentiment is keyword-based and intentionally simple.
 - Articles are stored as full documents; there is no chunking in the MVP.
@@ -394,7 +448,7 @@ Important per-run fields:
 
 - Improve or replace the fallback embedding implementation if local-only semantic quality becomes important.
 - Add a stronger sentiment model.
-- Add more sources through the existing source configuration shape.
+- Add more external providers through the existing source configuration shape.
 - Add chunking for long articles if semantic granularity becomes important.
 - Add pagination and filtering by source, date, or sentiment.
 - Add automated tests around parsing, enrichment, indexing, and search.

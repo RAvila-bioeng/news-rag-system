@@ -50,31 +50,53 @@ public class IngestionService {
     }
 
     public Map<String, Object> runIngestion() {
-        SourceConfig newsApiSource = null;
+        List<SourceConfig> sources = sourceConfigurationLoader.loadSources().stream()
+                .filter(this::isNewsApiCompatible)
+                .toList();
 
+        if (sources.isEmpty()) {
+            throw new IllegalStateException("No NewsAPI-compatible sources are configured");
+        }
+
+        List<Map<String, Object>> sourceSummaries = sources.stream()
+                .map(this::ingestSource)
+                .toList();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", "ok");
+        result.put("sourceCount", sourceSummaries.size());
+        result.put("fetchedCount", sum(sourceSummaries, "fetchedCount"));
+        result.put("normalizedCount", sum(sourceSummaries, "normalizedCount"));
+        result.put("processedCount", sum(sourceSummaries, "processedCount"));
+        result.put("embeddedCount", sum(sourceSummaries, "embeddedCount"));
+        result.put("indexedCount", sum(sourceSummaries, "indexedCount"));
+        result.put("createdCount", sum(sourceSummaries, "createdCount"));
+        result.put("updatedCount", sum(sourceSummaries, "updatedCount"));
+        result.put("totalResults", sum(sourceSummaries, "totalResults"));
+        result.put("positiveCount", sum(sourceSummaries, "positiveCount"));
+        result.put("negativeCount", sum(sourceSummaries, "negativeCount"));
+        result.put("neutralCount", sum(sourceSummaries, "neutralCount"));
+        result.put("sources", sourceSummaries);
+        return result;
+    }
+
+    private Map<String, Object> ingestSource(SourceConfig source) {
         try {
-            List<SourceConfig> sources = sourceConfigurationLoader.loadSources();
-
-            newsApiSource = sources.stream()
-                    .filter(source -> "NewsAPI".equalsIgnoreCase(source.getName()))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalStateException("NewsAPI source is not configured"));
-
-            NewsApiResponse response = newsApiFetcher.fetch(newsApiSource);
+            NewsApiResponse response = newsApiFetcher.fetch(source);
 
             int fetchedCount = response.getArticles() == null
                     ? 0
                     : response.getArticles().size();
 
             List<NormalizedArticle> normalizedArticles =
-                    newsApiArticleParser.parse(response, newsApiSource.getName());
+                    newsApiArticleParser.parse(response, source.getName());
             List<ProcessedArticle> processedArticles = articleEnricher.enrich(normalizedArticles);
             IndexingSummary indexingSummary = articleIndexer.indexArticles(processedArticles);
 
             LOG.info(
                     "Fetched {} articles from {}, normalized {} articles, enriched {} articles, indexed {} articles ({} created, {} updated)",
                     fetchedCount,
-                    newsApiSource.getName(),
+                    source.getName(),
                     normalizedArticles.size(),
                     processedArticles.size(),
                     indexingSummary.indexedCount(),
@@ -84,7 +106,7 @@ public class IngestionService {
 
             IngestionRunMetrics metrics = IngestionRunMetrics.successfulRun(
                     Instant.now(),
-                    newsApiSource.getName(),
+                    source.getName(),
                     response.getStatus(),
                     response.getTotalResults(),
                     fetchedCount,
@@ -98,45 +120,71 @@ public class IngestionService {
 
             metricsWriter.write(metrics);
 
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("status", "ok");
-            result.put("source", newsApiSource.getName());
-            result.put("fetchedCount", fetchedCount);
-            result.put("normalizedCount", normalizedArticles.size());
-            result.put("processedCount", processedArticles.size());
-            result.put("embeddedCount", metrics.embeddedCount());
-            result.put("indexedCount", metrics.indexedCount());
-            result.put("createdCount", metrics.createdCount());
-            result.put("updatedCount", metrics.updatedCount());
-            result.put("totalResults", response.getTotalResults());
-            result.put("positiveCount", metrics.positiveCount());
-            result.put("negativeCount", metrics.negativeCount());
-            result.put("neutralCount", metrics.neutralCount());
-            return result;
+            return sourceSummary(source.getName(), response.getTotalResults(), fetchedCount, normalizedArticles.size(),
+                    processedArticles.size(), metrics);
         } catch (Exception e) {
-            String sourceName = newsApiSource == null ? "NewsAPI" : newsApiSource.getName();
-            LOG.error("Ingestion run failed for source {}", sourceName, e);
-
-            metricsWriter.write(new IngestionRunMetrics(
-                    Instant.now(),
-                    sourceName,
-                    "FAILED",
-                    null,
-                    0,
-                    0,
-                    0,
-                    0,
-                    1,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0
-            ));
-
+            LOG.error("Ingestion run failed for source {}", source.getName(), e);
+            metricsWriter.write(failedMetrics(source.getName()));
             throw e;
         }
+    }
+
+    private Map<String, Object> sourceSummary(
+            String sourceName,
+            int totalResults,
+            int fetchedCount,
+            int normalizedCount,
+            int processedCount,
+            IngestionRunMetrics metrics
+    ) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("source", sourceName);
+        result.put("status", "ok");
+        result.put("fetchedCount", fetchedCount);
+        result.put("normalizedCount", normalizedCount);
+        result.put("processedCount", processedCount);
+        result.put("embeddedCount", metrics.embeddedCount());
+        result.put("indexedCount", metrics.indexedCount());
+        result.put("createdCount", metrics.createdCount());
+        result.put("updatedCount", metrics.updatedCount());
+        result.put("totalResults", totalResults);
+        result.put("positiveCount", metrics.positiveCount());
+        result.put("negativeCount", metrics.negativeCount());
+        result.put("neutralCount", metrics.neutralCount());
+        return result;
+    }
+
+    private IngestionRunMetrics failedMetrics(String sourceName) {
+        return new IngestionRunMetrics(
+                Instant.now(),
+                sourceName,
+                "FAILED",
+                null,
+                0,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+        );
+    }
+
+    private boolean isNewsApiCompatible(SourceConfig source) {
+        return source.getUrl() != null && source.getUrl().toLowerCase().contains("newsapi.org");
+    }
+
+    private int sum(List<Map<String, Object>> sourceSummaries, String field) {
+        return sourceSummaries.stream()
+                .map(summary -> summary.get(field))
+                .filter(Number.class::isInstance)
+                .map(Number.class::cast)
+                .mapToInt(Number::intValue)
+                .sum();
     }
 }
