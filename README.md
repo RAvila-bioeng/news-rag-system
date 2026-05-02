@@ -340,20 +340,21 @@ It uses the same OpenSearch index and the same embedding provider and dimensions
 Search for indexed news articles:
 
 ```powershell
-curl.exe "http://localhost:8082/search?q=iran"
+curl.exe "http://localhost:8082/search?q=technology"
 ```
 
-Another example:
+The optional `size` query parameter controls how many results are requested. It defaults to `5` and must be between `1` and `20`.
 
 ```powershell
-curl.exe "http://localhost:8082/search?q=technology"
+curl.exe "http://localhost:8082/search?q=technology&size=3"
+curl.exe "http://localhost:8082/search?q=technology&size=10"
 ```
 
 Expected response shape:
 
 ```json
 {
-  "query": "iran",
+  "query": "technology",
   "resultCount": 5,
   "results": [
     {
@@ -368,7 +369,7 @@ Expected response shape:
 }
 ```
 
-If `q` is missing or blank, the service returns `400 Bad Request`.
+If `q` is missing or blank, the service returns `400 Bad Request`. If `size` is outside the allowed range, the service also returns `400 Bad Request` with a clear validation message.
 
 ## Scheduled Ingestion
 
@@ -521,8 +522,8 @@ Run example searches:
 
 ```powershell
 curl.exe "http://localhost:8082/search?q=technology"
-curl.exe "http://localhost:8082/search?q=business"
-curl.exe "http://localhost:8082/search?q=iran"
+curl.exe "http://localhost:8082/search?q=technology&size=3"
+curl.exe "http://localhost:8082/search?q=technology&size=10"
 ```
 
 Open the metrics file:
