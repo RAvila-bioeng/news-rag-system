@@ -6,10 +6,15 @@ import io.micronaut.http.HttpResponse;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
 import io.micronaut.http.annotation.QueryValue;
+import java.util.Map;
 import java.util.Optional;
 
 @Controller("/search")
 public class SearchController {
+
+    private static final int DEFAULT_SIZE = 5;
+    private static final int MIN_SIZE = 1;
+    private static final int MAX_SIZE = 20;
 
     private final SearchService searchService;
 
@@ -18,11 +23,19 @@ public class SearchController {
     }
 
     @Get
-    public HttpResponse<SearchResponse> search(@QueryValue Optional<String> q) {
+    public HttpResponse<?> search(
+            @QueryValue Optional<String> q,
+            @QueryValue Optional<Integer> size
+    ) {
         if (q.isEmpty() || q.get().isBlank()) {
-            return HttpResponse.badRequest();
+            return HttpResponse.badRequest(Map.of("message", "Query parameter 'q' is required"));
         }
 
-        return HttpResponse.ok(searchService.search(q.get()));
+        int requestedSize = size.orElse(DEFAULT_SIZE);
+        if (requestedSize < MIN_SIZE || requestedSize > MAX_SIZE) {
+            return HttpResponse.badRequest(Map.of("message", "Query parameter 'size' must be between 1 and 20"));
+        }
+
+        return HttpResponse.ok(searchService.search(q.get(), requestedSize));
     }
 }

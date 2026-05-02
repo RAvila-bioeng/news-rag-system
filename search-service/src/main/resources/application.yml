@@ -15,6 +15,3 @@ embedding:
   provider: ${EMBEDDING_PROVIDER:openai}
   dimensions: ${EMBEDDING_DIMENSIONS:384}
   model: ${EMBEDDING_MODEL:text-embedding-3-small}
-
-search:
-  default-top-k: 5
