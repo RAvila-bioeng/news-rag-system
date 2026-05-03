@@ -3,12 +3,11 @@ package com.ragnews.ingestion.service;
 import com.ragnews.ingestion.config.SourceConfig;
 import com.ragnews.ingestion.config.SourceConfigurationLoader;
 import com.ragnews.ingestion.enrichment.ArticleEnricher;
-import com.ragnews.ingestion.fetcher.NewsApiFetcher;
+import com.ragnews.ingestion.fetcher.GenericHttpNewsFetcher;
 import com.ragnews.ingestion.metrics.IngestionRunMetrics;
 import com.ragnews.ingestion.metrics.MetricsWriter;
-import com.ragnews.ingestion.model.NewsApiResponse;
 import com.ragnews.ingestion.model.ProcessedArticle;
-import com.ragnews.ingestion.parser.NewsApiArticleParser;
+import com.ragnews.ingestion.parser.GenericJsonArticleParser;
 import com.ragnews.ingestion.parser.NormalizedArticle;
 import com.ragnews.ingestion.storage.ArticleIndexer;
 import com.ragnews.ingestion.storage.IndexingSummary;
@@ -25,25 +24,26 @@ import java.util.Map;
 public class IngestionService {
 
     private static final Logger LOG = LoggerFactory.getLogger(IngestionService.class);
+    private static final String GENERIC_JSON_TYPE = "generic-json";
 
     private final SourceConfigurationLoader sourceConfigurationLoader;
-    private final NewsApiFetcher newsApiFetcher;
-    private final NewsApiArticleParser newsApiArticleParser;
+    private final GenericHttpNewsFetcher genericHttpNewsFetcher;
+    private final GenericJsonArticleParser genericJsonArticleParser;
     private final ArticleEnricher articleEnricher;
     private final ArticleIndexer articleIndexer;
     private final MetricsWriter metricsWriter;
 
     public IngestionService(
             SourceConfigurationLoader sourceConfigurationLoader,
-            NewsApiFetcher newsApiFetcher,
-            NewsApiArticleParser newsApiArticleParser,
+            GenericHttpNewsFetcher genericHttpNewsFetcher,
+            GenericJsonArticleParser genericJsonArticleParser,
             ArticleEnricher articleEnricher,
             ArticleIndexer articleIndexer,
             MetricsWriter metricsWriter
     ) {
         this.sourceConfigurationLoader = sourceConfigurationLoader;
-        this.newsApiFetcher = newsApiFetcher;
-        this.newsApiArticleParser = newsApiArticleParser;
+        this.genericHttpNewsFetcher = genericHttpNewsFetcher;
+        this.genericJsonArticleParser = genericJsonArticleParser;
         this.articleEnricher = articleEnricher;
         this.articleIndexer = articleIndexer;
         this.metricsWriter = metricsWriter;
@@ -51,11 +51,11 @@ public class IngestionService {
 
     public Map<String, Object> runIngestion() {
         List<SourceConfig> sources = sourceConfigurationLoader.loadSources().stream()
-                .filter(this::isNewsApiCompatible)
+                .filter(this::shouldIngestSource)
                 .toList();
 
         if (sources.isEmpty()) {
-            throw new IllegalStateException("No NewsAPI-compatible sources are configured");
+            throw new IllegalStateException("No enabled generic-json sources are configured");
         }
 
         List<Map<String, Object>> sourceSummaries = sources.stream()
@@ -82,14 +82,10 @@ public class IngestionService {
 
     private Map<String, Object> ingestSource(SourceConfig source) {
         try {
-            NewsApiResponse response = newsApiFetcher.fetch(source);
-
-            int fetchedCount = response.getArticles() == null
-                    ? 0
-                    : response.getArticles().size();
-
-            List<NormalizedArticle> normalizedArticles =
-                    newsApiArticleParser.parse(response, source.getName());
+            String rawJson = genericHttpNewsFetcher.fetch(source);
+            List<NormalizedArticle> normalizedArticles = genericJsonArticleParser.parse(rawJson, source);
+            int fetchedCount = normalizedArticles.size();
+            int totalResults = normalizedArticles.size();
             List<ProcessedArticle> processedArticles = articleEnricher.enrich(normalizedArticles);
             IndexingSummary indexingSummary = articleIndexer.indexArticles(processedArticles);
 
@@ -107,8 +103,8 @@ public class IngestionService {
             IngestionRunMetrics metrics = IngestionRunMetrics.successfulRun(
                     Instant.now(),
                     source.getName(),
-                    response.getStatus(),
-                    response.getTotalResults(),
+                    "ok",
+                    totalResults,
                     fetchedCount,
                     normalizedArticles.size(),
                     fetchedCount - normalizedArticles.size(),
@@ -120,7 +116,7 @@ public class IngestionService {
 
             metricsWriter.write(metrics);
 
-            return sourceSummary(source.getName(), response.getTotalResults(), fetchedCount, normalizedArticles.size(),
+            return sourceSummary(source.getName(), totalResults, fetchedCount, normalizedArticles.size(),
                     processedArticles.size(), metrics);
         } catch (Exception e) {
             LOG.error("Ingestion run failed for source {}", source.getName(), e);
@@ -175,8 +171,23 @@ public class IngestionService {
         );
     }
 
-    private boolean isNewsApiCompatible(SourceConfig source) {
-        return source.getUrl() != null && source.getUrl().toLowerCase().contains("newsapi.org");
+    private boolean shouldIngestSource(SourceConfig source) {
+        if (!source.isEnabled()) {
+            LOG.info("Skipping disabled source {}", source.getName());
+            return false;
+        }
+
+        if (!GENERIC_JSON_TYPE.equalsIgnoreCase(source.getType())) {
+            LOG.warn(
+                    "Skipping source {} because type '{}' is not supported. Supported type: {}",
+                    source.getName(),
+                    source.getType(),
+                    GENERIC_JSON_TYPE
+            );
+            return false;
+        }
+
+        return true;
     }
 
     private int sum(List<Map<String, Object>> sourceSummaries, String field) {

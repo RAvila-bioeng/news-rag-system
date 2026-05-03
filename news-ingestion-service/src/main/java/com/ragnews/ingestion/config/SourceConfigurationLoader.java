@@ -8,6 +8,8 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,10 +36,15 @@ public class SourceConfigurationLoader {
 
             for (Map<String, Object> rawSource : rawSources) {
                 SourceConfig source = new SourceConfig();
-                source.setName((String) rawSource.get("name"));
-                source.setUrl((String) rawSource.get("url"));
-                source.setSchedule((String) rawSource.get("schedule"));
-                source.setParams((Map<String, String>) rawSource.get("params"));
+                source.setName(asString(rawSource.get("name")));
+                source.setEnabled(asBoolean(rawSource.get("enabled"), true));
+                source.setType(defaultIfBlank(asString(rawSource.get("type")), "generic-json"));
+                source.setUrl(asString(rawSource.get("url")));
+                source.setMethod(defaultIfBlank(asString(rawSource.get("method")), "GET"));
+                source.setHeaders(asStringMap(rawSource.get("headers")));
+                source.setParams(asStringMap(rawSource.get("params")));
+                source.setSchedule(asString(rawSource.get("schedule")));
+                source.setResponseMapping(asResponseMapping(rawSource.get("responseMapping")));
                 sources.add(source);
             }
 
@@ -67,5 +74,72 @@ public class SourceConfigurationLoader {
                 "Could not find source configuration by searching upwards for " + CONFIG_RELATIVE_PATH +
                         " from " + Path.of("").toAbsolutePath()
         );
+    }
+
+    private ResponseMappingConfig asResponseMapping(Object value) {
+        if (!(value instanceof Map<?, ?> rawMapping)) {
+            return null;
+        }
+
+        ResponseMappingConfig responseMapping = new ResponseMappingConfig();
+        responseMapping.setArticlesPath(asString(rawMapping.get("articlesPath")));
+        responseMapping.setTitle(asString(rawMapping.get("title")));
+        responseMapping.setContent(asString(rawMapping.get("content")));
+        responseMapping.setUrl(asString(rawMapping.get("url")));
+        responseMapping.setSource(asString(rawMapping.get("source")));
+        responseMapping.setTimestamp(asString(rawMapping.get("timestamp")));
+        return responseMapping;
+    }
+
+    private Map<String, String> asStringMap(Object value) {
+        if (!(value instanceof Map<?, ?> rawMap) || rawMap.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, String> result = new LinkedHashMap<>();
+
+        for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+            String key = asString(entry.getKey());
+            String mapValue = asString(entry.getValue());
+
+            if (key != null) {
+                result.put(key, mapValue);
+            }
+        }
+
+        return result;
+    }
+
+    private boolean asBoolean(Object value, boolean defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+
+        String stringValue = asString(value);
+        if (stringValue == null || stringValue.isBlank()) {
+            return defaultValue;
+        }
+
+        return Boolean.parseBoolean(stringValue);
+    }
+
+    private String defaultIfBlank(String value, String defaultValue) {
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+
+        return value;
+    }
+
+    private String asString(Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        return String.valueOf(value);
     }
 }
