@@ -25,6 +25,7 @@ This repository contains two Micronaut services plus a local OpenSearch setup:
 - `search-service`: exposes a REST API for semantic search over indexed articles.
 - `config/sources.yaml`: source configuration for NewsAPI.
 - `scripts/opensearch/create-news-article-index.ps1`: creates or recreates the local OpenSearch index.
+- `docs/demo-script.md`: step-by-step script for the final technical demo.
 - `docker-compose.yml`: starts OpenSearch locally.
 
 The MVP intentionally focuses on one provider, NewsAPI.org, implemented well. The ingestion service can process multiple configured NewsAPI source entries, such as technology, business, and health feeds. It stores each article as one full OpenSearch document with one embedding vector. Chunking is not implemented in this version.
@@ -79,7 +80,7 @@ Embedding configuration is intentionally centralized in the root `.env` file. Th
 - Persists ingestion metrics to `data/metrics/ingestion-metrics.json`.
 - Supports manual ingestion with `POST /ingestion/run`.
 - Supports scheduled ingestion through Micronaut scheduling.
-- Supports semantic search with `GET /search?q=...`.
+- Supports semantic search with `GET /search?q=...`, optional result size, and optional minimum score filtering.
 
 ## Prerequisites
 
@@ -343,12 +344,17 @@ Search for indexed news articles:
 curl.exe "http://localhost:8082/search?q=technology"
 ```
 
-The optional `size` query parameter controls how many results are requested. It defaults to `5` and must be between `1` and `20`.
+Supported request forms:
 
 ```powershell
-curl.exe "http://localhost:8082/search?q=technology&size=3"
+curl.exe "http://localhost:8082/search?q=technology"
 curl.exe "http://localhost:8082/search?q=technology&size=10"
+curl.exe "http://localhost:8082/search?q=technology&size=10&minScore=0.39"
 ```
+
+The optional `size` query parameter controls the maximum number of results returned. It defaults to `5` and must be between `1` and `20`.
+
+The optional `minScore` query parameter filters out low-scoring semantic matches after OpenSearch returns hits. It must be greater than or equal to `0`. When `minScore` is not provided, the previous behavior is unchanged.
 
 Expected response shape:
 
@@ -363,13 +369,44 @@ Expected response shape:
       "url": "...",
       "sentiment": "NEUTRAL",
       "timestamp": "...",
-      "score": 0.38
+      "score": 0.42
     }
   ]
 }
 ```
 
-If `q` is missing or blank, the service returns `400 Bad Request`. If `size` is outside the allowed range, the service also returns `400 Bad Request` with a clear validation message.
+When `minScore` is provided, the response includes it:
+
+```json
+{
+  "query": "technology",
+  "resultCount": 3,
+  "minScore": 0.39,
+  "results": [
+    {
+      "title": "...",
+      "score": 0.42
+    }
+  ]
+}
+```
+
+When `minScore` is omitted, it is also omitted from the JSON response. If `q` is missing or blank, the service returns `400 Bad Request`. If `size` is outside the allowed range, or `minScore` is negative, the service also returns `400 Bad Request` with a clear validation message.
+
+## Tests
+
+Run the current search-service tests from the repository root:
+
+```powershell
+mvn -f search-service/pom.xml test
+```
+
+Current search controller coverage includes:
+
+- search without `minScore`
+- search with valid `minScore`
+- negative `minScore`
+- invalid `size`
 
 ## Scheduled Ingestion
 
@@ -440,9 +477,10 @@ Important per-run fields:
 - The `simple-hash` fallback embeddings are deterministic local hash embeddings, not model-quality semantic embeddings.
 - Sentiment is keyword-based and intentionally simple.
 - Articles are stored as full documents; there is no chunking in the MVP.
-- Search returns top-k semantic matches but does not include pagination.
+- Search returns top-k semantic matches with optional minimum score filtering, but does not include pagination.
 - There is no frontend, authentication, dashboard, or LLM answer generation.
 - The local OpenSearch setup disables the security plugin for development simplicity.
+- Test coverage is currently focused on the search controller validation path.
 - Error handling and metrics are practical for the MVP, not production observability.
 
 ## Future Improvements
@@ -452,7 +490,7 @@ Important per-run fields:
 - Add more external providers through the existing source configuration shape.
 - Add chunking for long articles if semantic granularity becomes important.
 - Add pagination and filtering by source, date, or sentiment.
-- Add automated tests around parsing, enrichment, indexing, and search.
+- Expand automated tests around parsing, enrichment, indexing, OpenSearch response parsing, and search.
 - Add a lightweight demo UI or dashboard.
 - Add authentication if the API becomes user-facing.
 - Add LLM answer generation on top of retrieved articles as a later RAG layer.
@@ -460,7 +498,7 @@ Important per-run fields:
 
 ## Demo Flow Commands
 
-Use this sequence for a clean interview/demo run.
+Use this sequence for a clean interview/demo run. For the narrated final walkthrough, see `docs/demo-script.md`.
 
 Compile both services:
 
@@ -524,6 +562,7 @@ Run example searches:
 curl.exe "http://localhost:8082/search?q=technology"
 curl.exe "http://localhost:8082/search?q=technology&size=3"
 curl.exe "http://localhost:8082/search?q=technology&size=10"
+curl.exe "http://localhost:8082/search?q=technology&size=10&minScore=0.39"
 ```
 
 Open the metrics file:
