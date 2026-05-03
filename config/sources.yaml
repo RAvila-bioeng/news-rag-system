@@ -62,6 +62,25 @@ sources:
       timestamp: $.publishedAt
     schedule: "0 0 8 * * ?"
 
+  - name: Hacker News Technology
+    enabled: true
+    type: generic-json
+    url: https://hn.algolia.com/api/v1/search_by_date
+    method: GET
+    headers:
+      User-Agent: "news-rag-system/0.1 (Roberto Avila; local development)"
+    params:
+      tags: story
+      query: technology
+      hitsPerPage: "10"
+    responseMapping:
+      articlesPath: $.hits
+      title: $.title
+      content: $.story_text
+      url: $.url
+      source: $.source
+      timestamp: $.created_at
+
   - name: Example Generic News API
     enabled: false
     type: generic-json
