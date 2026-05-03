@@ -26,10 +26,14 @@ public class SearchService {
     }
 
     public SearchResponse search(String query, int size) {
+        return search(query, size, null);
+    }
+
+    public SearchResponse search(String query, int size, Double minScore) {
         List<Double> queryEmbedding = embeddingGenerator.generateEmbedding(query);
         LOG.info("Generated query embedding for '{}' with dimension {}", query, queryEmbedding.size());
 
-        List<SearchResult> results = openSearchSearchClient.searchByEmbedding(queryEmbedding, size);
-        return new SearchResponse(query, results.size(), results);
+        List<SearchResult> results = openSearchSearchClient.searchByEmbedding(queryEmbedding, size, minScore);
+        return new SearchResponse(query, results.size(), minScore, results);
     }
 }

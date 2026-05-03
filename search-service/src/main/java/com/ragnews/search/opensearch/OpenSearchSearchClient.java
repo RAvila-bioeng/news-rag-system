@@ -33,6 +33,10 @@ public class OpenSearchSearchClient {
     }
 
     public List<SearchResult> searchByEmbedding(List<Double> embedding, int topK) {
+        return searchByEmbedding(embedding, topK, null);
+    }
+
+    public List<SearchResult> searchByEmbedding(List<Double> embedding, int topK, Double minScore) {
         try {
             String requestBody = objectMapper.writeValueAsString(buildSearchRequest(embedding, topK));
             HttpRequest request = HttpRequest.newBuilder(searchUri)
@@ -50,7 +54,8 @@ public class OpenSearchSearchClient {
                 );
             }
 
-            return parseSearchResults(response.body());
+            List<SearchResult> results = parseSearchResults(response.body());
+            return filterByMinScore(results, minScore);
         } catch (IOException e) {
             throw new RuntimeException("Could not serialize or send OpenSearch search request", e);
         } catch (InterruptedException e) {
@@ -100,6 +105,21 @@ public class OpenSearchSearchClient {
         }
 
         return results;
+    }
+
+    private List<SearchResult> filterByMinScore(List<SearchResult> results, Double minScore) {
+        if (minScore == null) {
+            return results;
+        }
+
+        List<SearchResult> filteredResults = new ArrayList<>();
+        for (SearchResult result : results) {
+            if (result.score() >= minScore) {
+                filteredResults.add(result);
+            }
+        }
+
+        return filteredResults;
     }
 
     @SuppressWarnings("unchecked")

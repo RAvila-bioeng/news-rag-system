@@ -25,7 +25,8 @@ public class SearchController {
     @Get
     public HttpResponse<?> search(
             @QueryValue Optional<String> q,
-            @QueryValue Optional<Integer> size
+            @QueryValue Optional<Integer> size,
+            @QueryValue Optional<Double> minScore
     ) {
         if (q.isEmpty() || q.get().isBlank()) {
             return HttpResponse.badRequest(Map.of("message", "Query parameter 'q' is required"));
@@ -36,6 +37,10 @@ public class SearchController {
             return HttpResponse.badRequest(Map.of("message", "Query parameter 'size' must be between 1 and 20"));
         }
 
-        return HttpResponse.ok(searchService.search(q.get(), requestedSize));
+        if (minScore.isPresent() && minScore.get() < 0) {
+            return HttpResponse.badRequest(Map.of("message", "Query parameter 'minScore' must be greater than or equal to 0"));
+        }
+
+        return HttpResponse.ok(searchService.search(q.get(), requestedSize, minScore.orElse(null)));
     }
 }
