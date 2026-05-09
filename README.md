@@ -105,6 +105,10 @@ OPENAI_API_KEY=your-openai-api-key
 EMBEDDING_PROVIDER=openai
 EMBEDDING_DIMENSIONS=384
 EMBEDDING_MODEL=text-embedding-3-small
+
+SENTIMENT_PROVIDER=openai
+SENTIMENT_MODEL=gpt-4.1-mini
+SENTIMENT_MAX_TEXT_CHARS=3000
 ```
 
 `config/sources.yaml` uses this variable:
@@ -125,6 +129,24 @@ EMBEDDING_PROVIDER=simple-hash
 EMBEDDING_DIMENSIONS=16
 EMBEDDING_MODEL=
 ```
+
+Sentiment provider configuration:
+
+```env
+SENTIMENT_PROVIDER=openai
+SENTIMENT_MODEL=gpt-4.1-mini
+SENTIMENT_MAX_TEXT_CHARS=3000
+OPENAI_API_KEY=your-openai-api-key
+```
+
+For a fully local sentiment fallback:
+
+```env
+SENTIMENT_PROVIDER=simple
+SENTIMENT_MAX_TEXT_CHARS=3000
+```
+
+When `SENTIMENT_PROVIDER=openai`, the ingestion service asks OpenAI for strict JSON sentiment and falls back to the local keyword analyzer if the API key is missing, the request fails, or the response cannot be parsed.
 
 Do not commit real API keys. Keep secrets in your local `.env` or shell environment.
 
