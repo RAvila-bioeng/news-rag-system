@@ -1,270 +1,187 @@
-# Demo Script — News RAG System
+# Demo Script - News RAG System
 
-## 1. Objective of the demo
+This guide is a practical walkthrough for the Nexthink RAG news technical assignment demo. It is intentionally command-focused so the system can be shown live without turning the demo into a second README.
 
-This project implements a RAG-based news processing system for the Nexthink technical assignment.
+All commands assume Windows PowerShell from the repository root.
 
-The system demonstrates the following end-to-end flow:
+## Demo Flow
 
-```text
-External News API
-    ↓
-News Ingestion Service
-    ↓
-Fetch articles
-    ↓
-Parse and normalize articles
-    ↓
-Sentiment analysis
-    ↓
-Embedding generation
-    ↓
-Store documents in OpenSearch
-    ↓
-Search Service
-    ↓
-Query embedding
-    ↓
-k-NN semantic search
-    ↓
-JSON search results
+### 1. Show Source Configuration
 
-The goal of this demo is not to present a production-perfect system, but a clean, modular and extensible MVP that satisfies the main requirements of the assignment.
+Open:
 
-2. Current scope
+```powershell
+Get-Content .\config\sources.yaml
+```
 
-The current implementation supports:
+Point out:
 
-Real news ingestion from NewsAPI.
-Multiple configured NewsAPI source entries.
-Article normalization.
-Basic sentiment analysis.
-Configurable embedding generation:
-OpenAI embeddings.
-Simple local hash-based fallback embeddings.
-OpenSearch vector storage.
-Deterministic document IDs to avoid duplicates.
-File-based ingestion metrics.
-Manual ingestion endpoint.
-Scheduled ingestion support.
-Semantic search API.
-Configurable result size.
-Optional minScore filtering.
-Basic controller tests for the search endpoint.
-3. Main services
+- Sources are configuration-driven.
+- Enabled `generic-json` sources are processed.
+- NewsAPI uses `NEWS_API_KEY` through a header placeholder.
+- Hacker News shows a second source shape using a different response mapping.
+- Disabled example sources are present for extension or failure testing.
 
-The project is organized into two main Java Micronaut services.
+Expected takeaway: adding a normal JSON GET API is mostly a configuration task.
 
-3.1. news-ingestion-service
+### 2. Start OpenSearch
 
-Responsible for:
-
-Loading source configuration from config/sources.yaml.
-Fetching articles from NewsAPI.
-Parsing external API responses.
-Normalizing articles into an internal model.
-Enriching articles with sentiment and embeddings.
-Indexing processed articles into OpenSearch.
-Writing ingestion metrics to disk.
-
-Runs on:
-
-http://localhost:8081
-
-Main endpoint:
-
-POST /ingestion/run
-3.2. search-service
-
-Responsible for:
-
-Receiving semantic search requests.
-Validating query parameters.
-Generating an embedding for the user query.
-Running k-NN search against OpenSearch.
-Returning ranked JSON results.
-
-Runs on:
-
-http://localhost:8082
-
-Main endpoint:
-
-GET /search?q=...
-
-Optional parameters:
-
-size
-minScore
-
-Examples:
-
-GET /search?q=healthcare
-GET /search?q=healthcare&size=10
-GET /search?q=healthcare&size=10&minScore=0.39
-4. Prerequisites
-
-Before running the demo, make sure the following tools are installed:
-
-Java
-Maven
-Docker Desktop
-PowerShell
-OpenSearch running through Docker Compose
-
-The root .env file must contain the required configuration.
-
-Example:
-
-NEWS_API_KEY=your_newsapi_key
-OPENAI_API_KEY=your_openai_api_key
-
-EMBEDDING_PROVIDER=openai
-EMBEDDING_DIMENSIONS=384
-EMBEDDING_MODEL=text-embedding-3-small
-
-For local fallback mode:
-
-EMBEDDING_PROVIDER=simple-hash
-EMBEDDING_DIMENSIONS=16
-EMBEDDING_MODEL=text-embedding-3-small
-
-Important note:
-
-If EMBEDDING_DIMENSIONS changes, the OpenSearch index must be recreated because the knn_vector dimension is fixed in the index mapping.
-
-5. Start OpenSearch
-
-From the project root:
-
-docker compose up -d
-
-Verify that OpenSearch is running:
-
+```powershell
+docker compose up -d opensearch
 curl.exe http://localhost:9200
+```
 
-Expected result:
+Expected output conceptually: OpenSearch returns cluster information as JSON.
 
-OpenSearch should return cluster information as JSON.
+Explain that OpenSearch stores full news documents plus a `knn_vector` field used for semantic search.
 
-6. Create or recreate the OpenSearch index
+### 3. Recreate The Index
 
-For OpenAI embeddings with 384 dimensions:
+For OpenAI embedding mode:
 
+```powershell
 .\scripts\opensearch\create-news-article-index.ps1 -Recreate
+```
 
-For simple-hash fallback embeddings with 16 dimensions:
+For simple-hash fallback mode:
 
+```powershell
 .\scripts\opensearch\create-news-article-index.ps1 -Recreate -EmbeddingDimension 16
+```
 
-Check that the index exists:
+Verify:
 
+```powershell
 curl.exe http://localhost:9200/news_article
-7. Start the ingestion service
+```
 
-From the project root:
+Expected output conceptually: the `news_article` index exists and includes an `embedding` field of type `knn_vector`.
 
+Mention that OpenAI mode uses 384 dimensions in this project, while simple-hash uses 16. If `EMBEDDING_DIMENSIONS` changes, the index must be recreated.
+
+### 4. Start news-ingestion-service
+
+In terminal 1:
+
+```powershell
 mvn -f news-ingestion-service/pom.xml mn:run
+```
 
-The service should start on:
+Expected output conceptually: Micronaut starts `news-ingestion-service` on `http://localhost:8081`.
 
-http://localhost:8081
-8. Run manual ingestion
+### 5. Run Manual Ingestion
 
-In a second terminal:
+In terminal 2:
 
+```powershell
 curl.exe -X POST http://localhost:8081/ingestion/run
+```
 
-Expected result:
+Expected output conceptually:
 
-The response should include aggregated ingestion information such as:
-
+```json
 {
   "status": "ok",
-  "sourceCount": 3,
-  "fetchedCount": 29,
-  "normalizedCount": 29,
-  "processedCount": 29,
-  "embeddedCount": 29,
-  "indexedCount": 29,
-  "createdCount": 29,
-  "updatedCount": 0
+  "sourceCount": 4,
+  "fetchedCount": 40,
+  "normalizedCount": 40,
+  "processedCount": 40,
+  "embeddedCount": 40,
+  "indexedCount": 40,
+  "createdCount": 35,
+  "updatedCount": 5,
+  "positiveCount": 4,
+  "negativeCount": 7,
+  "neutralCount": 29,
+  "sources": [
+    {
+      "source": "NewsAPI Technology",
+      "status": "ok"
+    }
+  ]
 }
+```
 
-A second immediate ingestion should normally return:
+Exact counts and article contents vary because the APIs are live. A second ingestion often increases `updatedCount`, showing that existing documents are updated instead of duplicated.
 
-{
-  "createdCount": 0,
-  "updatedCount": 29
-}
+### 6. Show Metrics
 
-This demonstrates that deterministic document IDs are working and duplicate articles are updated instead of inserted again.
+```powershell
+Get-Content .\data\metrics\ingestion-metrics.json
+```
 
-9. Verify documents in OpenSearch
+Expected output conceptually: a JSON file with `lastRunAt` and `runs`.
 
-Refresh the index:
+Call out these fields:
 
+- `source`
+- `status`
+- `fetchedCount`
+- `normalizedCount`
+- `embeddedCount`
+- `indexedCount`
+- `createdCount`
+- `updatedCount`
+- `failedRequests`
+- `positiveCount`
+- `negativeCount`
+- `neutralCount`
+- `errorMessage`
+
+Explain that one ingestion request writes one metrics entry per processed source.
+
+### 7. Show OpenSearch Count
+
+Refresh and count:
+
+```powershell
 curl.exe -X POST http://localhost:9200/news_article/_refresh
-
-Count documents:
-
 curl.exe http://localhost:9200/news_article/_count
+```
 
-Expected result:
+Expected output conceptually:
 
+```json
 {
-  "count": 29
+  "count": 40
 }
+```
 
-The exact number can vary depending on the current NewsAPI response.
+The exact count depends on current source responses, normalization, and previous ingestion state.
 
-10. Check ingestion metrics
+Optional quick document inspection:
 
-Metrics are persisted in:
+```powershell
+curl.exe "http://localhost:9200/news_article/_search?size=1&pretty"
+```
 
-data/metrics/ingestion-metrics.json
+Expected output conceptually: a document with `title`, `content`, `source`, `url`, `timestamp`, `sentiment`, and `embedding`.
 
-The metrics file contains information such as:
+### 8. Start search-service
 
-run time
-source
-total fetched articles
-normalized articles
-processed articles
-embedded articles
-indexed articles
-created documents
-updated documents
-failed requests
-positive articles
-negative articles
-neutral articles
+In terminal 3:
 
-With multi-source ingestion, the system writes one metrics entry per configured source.
-
-11. Start the search service
-
-From the project root:
-
+```powershell
 mvn -f search-service/pom.xml mn:run
+```
 
-The service should start on:
+Expected output conceptually: Micronaut starts `search-service` on `http://localhost:8082`.
 
-http://localhost:8082
-12. Run semantic searches
+Explain that search uses the same embedding configuration as ingestion. Query vectors and article vectors must have the same dimensions.
 
-Basic semantic search:
+### 9. Run Semantic Searches
 
-curl.exe "http://localhost:8082/search?q=healthcare"
+Basic search:
 
-Expected behavior:
+```powershell
+curl.exe "http://localhost:8082/search?q=technology"
+```
 
-The service returns 5 semantic results by default.
+Expected output conceptually: 5 ranked results by default.
 
-Example response structure:
-
+```json
 {
-  "query": "healthcare",
+  "query": "technology",
   "resultCount": 5,
   "results": [
     {
@@ -273,194 +190,170 @@ Example response structure:
       "url": "...",
       "sentiment": "neutral",
       "timestamp": "...",
-      "score": 0.43015563
+      "score": 0.42
     }
   ]
 }
-13. Test configurable result size
+```
 
-Request 10 results:
+Try a few natural queries:
 
-curl.exe "http://localhost:8082/search?q=healthcare&size=10"
+```powershell
+curl.exe "http://localhost:8082/search?q=artificial%20intelligence"
+curl.exe "http://localhost:8082/search?q=markets"
+curl.exe "http://localhost:8082/search?q=healthcare"
+```
 
-Expected behavior:
+Expected output conceptually: results change according to semantic similarity and the articles currently indexed.
 
-The service returns up to 10 results.
+### 10. Demonstrate size
 
-Invalid size example:
+```powershell
+curl.exe "http://localhost:8082/search?q=technology&size=3"
+curl.exe "http://localhost:8082/search?q=technology&size=10"
+```
 
-curl.exe "http://localhost:8082/search?q=healthcare&size=0"
+Expected output conceptually: `resultCount` returns up to the requested size.
 
-Expected behavior:
+Invalid size:
 
+```powershell
+curl.exe "http://localhost:8082/search?q=technology&size=0"
+```
+
+Expected output conceptually:
+
+```json
 {
   "message": "Query parameter 'size' must be between 1 and 20"
 }
-14. Test minScore filtering
+```
 
-Request up to 10 results, but only if their score is at least 0.39:
+### 11. Demonstrate minScore
 
-curl.exe "http://localhost:8082/search?q=healthcare&size=10&minScore=0.39"
+```powershell
+curl.exe "http://localhost:8082/search?q=technology&size=10&minScore=0.39"
+```
 
-Expected behavior:
+Expected output conceptually: fewer than 10 results may be returned if some hits score below the threshold.
 
-The service returns fewer results than size=10 if some results have a score lower than 0.39.
-
-Example:
-
+```json
 {
-  "query": "healthcare",
+  "query": "technology",
   "resultCount": 3,
   "minScore": 0.39,
   "results": [
     {
       "title": "...",
-      "score": 0.43015563
-    },
-    {
-      "title": "...",
-      "score": 0.3972672
-    },
-    {
-      "title": "...",
-      "score": 0.39433435
+      "score": 0.42
     }
   ]
 }
+```
 
-Invalid minScore example:
+Invalid minScore:
 
-curl.exe "http://localhost:8082/search?q=healthcare&minScore=-1"
+```powershell
+curl.exe "http://localhost:8082/search?q=technology&minScore=-1"
+```
 
-Expected behavior:
+Expected output conceptually:
 
+```json
 {
   "message": "Query parameter 'minScore' must be greater than or equal to 0"
 }
-15. Why minScore was added
+```
 
-In k-NN search, size or topK controls how many nearest neighbors are returned, but it does not guarantee that all returned results are highly relevant.
+Explain that `size` controls how many nearest neighbors are requested, while `minScore` filters weak matches.
 
-For example:
+### 12. Explain OpenAI Sentiment vs Fallback
 
-size=10
+Show `.env.example`:
 
-means:
+```powershell
+Get-Content .\.env.example
+```
 
-return the 10 nearest available documents
+OpenAI sentiment mode:
 
-It does not mean:
+```env
+SENTIMENT_PROVIDER=openai
+SENTIMENT_MODEL=gpt-4.1-mini
+SENTIMENT_MAX_TEXT_CHARS=3000
+OPENAI_API_KEY=your_openai_api_key_here
+```
 
-return 10 very good documents
+Simple fallback mode:
 
-The optional minScore parameter allows the API client to filter out weak semantic matches.
+```env
+SENTIMENT_PROVIDER=simple
+SENTIMENT_MAX_TEXT_CHARS=3000
+```
 
-In this MVP, filtering is done in Java after receiving the OpenSearch hits. This keeps the implementation simple and explicit.
+Explain:
 
-A future production version could move this filtering into the OpenSearch query if needed for performance.
+- OpenAI sentiment gives a model-backed classification.
+- If OpenAI sentiment fails, the service falls back to the simple local keyword analyzer.
+- The fallback keeps ingestion resilient during demos and local development.
 
-16. Run tests
+### 13. Explain Partial Failure Test
 
-Run the current search-service tests:
+Open `config/sources.yaml` and point to the disabled `Broken Test Source`.
 
-mvn -f search-service/pom.xml test
+To demonstrate partial failure, you can temporarily set it to `enabled: true`, restart `news-ingestion-service`, and run:
 
-Expected result:
+```powershell
+curl.exe -X POST http://localhost:8081/ingestion/run
+```
 
-Tests run: 4, Failures: 0, Errors: 0
+Expected output conceptually:
 
-Current tests cover:
+```json
+{
+  "status": "partial",
+  "sources": [
+    {
+      "source": "NewsAPI Technology",
+      "status": "ok"
+    },
+    {
+      "source": "Broken Test Source",
+      "status": "failed",
+      "failedRequests": 1,
+      "errorMessage": "..."
+    }
+  ]
+}
+```
 
-search without minScore
-search with valid minScore
-negative minScore
-invalid size
-17. Key technical decisions
-Micronaut instead of Spring Boot
+Return `Broken Test Source` to `enabled: false` after the demo. This is a manual demo-only change, not required for normal operation.
 
-Micronaut was used because it is similar to Spring and aligns better with Nexthink's internal stack.
+## What To Explain During The Demo
 
-Full article as one document
+- This is a RAG-style retrieval foundation: it retrieves semantically relevant articles, but it does not yet generate LLM answers.
+- The architecture is intentionally modular: fetcher, parser, sentiment, embeddings, storage, metrics, and search are separated.
+- `sources.yaml` demonstrates extensibility through configuration.
+- OpenSearch stores both metadata and vectors in the same `news_article` document.
+- Ingestion and search must share the same embedding provider and dimension.
+- Source-level error handling prevents one bad API source from breaking the whole run.
+- Metrics are file-based because the assignment asks for simple persisted ingestion metrics.
+- The MVP avoids chunking to keep the first version understandable and reliable.
 
-Each news article is stored as a complete OpenSearch document.
+## Known Limitations And Next Steps
 
-Chunking was intentionally not included in the MVP because the initial goal is to keep the system simple and because full-article storage was considered sufficient for the first version.
+- No chunking yet; each article is one document.
+- No LLM answer generation yet; search returns ranked articles.
+- No frontend yet; interaction is through REST commands and files.
+- Result quality depends on external source content and API availability.
+- OpenAI mode requires an API key and can add cost and latency.
+- Search pagination is not implemented yet.
+- Java services are not yet Dockerized.
 
-Configuration-driven sources
+Recommended next steps:
 
-News sources are defined in:
-
-config/sources.yaml
-
-The current version uses multiple NewsAPI source entries with different categories.
-
-This demonstrates how the system can scale to multiple configured sources without changing the main ingestion flow.
-
-Embedding provider abstraction
-
-Both ingestion and search use the same EmbeddingGenerator abstraction.
-
-Current implementations:
-
-OpenAiEmbeddingGenerator
-SimpleHashEmbeddingGenerator
-
-This allows the system to switch between real semantic embeddings and local fallback embeddings through environment configuration.
-
-Deterministic document IDs
-
-The system uses deterministic document IDs based mainly on article URL.
-
-This makes ingestion idempotent:
-
-same article → same OpenSearch ID → update
-new article → new OpenSearch ID → create
-File-based metrics
-
-The assignment asks for basic persisted metrics.
-
-The current implementation writes ingestion metrics to:
-
-data/metrics/ingestion-metrics.json
-
-This is simple, inspectable and enough for the MVP.
-
-18. Current limitations
-
-The current system is intentionally an MVP.
-
-Known limitations:
-
-Only NewsAPI is currently implemented as an external provider.
-Multiple source entries exist, but they use the same NewsAPI provider.
-Sentiment analysis is simple and keyword-based.
-There is no chunking yet.
-There is no frontend dashboard.
-Error handling is basic and could be improved.
-There is no bulk indexing optimization yet.
-The search API does not implement pagination yet.
-The system is not fully dockerized as a multi-service production setup.
-The score threshold is empirical and should be calibrated with more data.
-19. Future roadmap
-
-Recommended next improvements:
-
-Add more unit tests for ingestion components.
-Add integration tests with OpenSearch.
-Improve graceful error handling and retries.
-Add pagination to the search API.
-Add a second external news provider with a different response schema.
-Improve sentiment analysis with a more robust model.
-Add a lightweight metrics dashboard.
-Add Dockerfiles for both Java services.
-Add docker-compose orchestration for OpenSearch, ingestion-service and search-service.
-Explore chunking if article-level retrieval becomes too coarse.
-20. Final demo summary
-
-The current implementation demonstrates a working end-to-end RAG-style news system:
-
-fetch → parse/normalize → sentiment → embed → store in OpenSearch → semantic search API
-
-The system is modular, configurable and extensible.
-
-It satisfies the core requirements of the assignment while keeping the implementation understandable and suitable for a technical interview discussion.
+- Add a minimal UI for ingestion and search.
+- Polish final demo examples and screenshots.
+- Add optional pagination.
+- Add Dockerfiles for both Java services.
+- Add a richer metrics dashboard or API endpoint.
