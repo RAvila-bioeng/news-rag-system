@@ -96,3 +96,18 @@ sources:
       url: $.link
       source: $.publisher
       timestamp: $.published_at
+  - name: Broken Test Source
+    enabled: false
+    type: generic-json
+    url: https://httpstat.us/500
+    method: GET
+    headers:
+      User-Agent: "news-rag-system/0.1 (Roberto Avila; local development)"
+    params: {}
+    responseMapping:
+      articlesPath: $.articles
+      title: $.title
+      content: $.description
+      url: $.url
+      source: $.source
+      timestamp: $.publishedAt
