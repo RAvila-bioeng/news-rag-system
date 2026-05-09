@@ -50,6 +50,8 @@ public class IngestionService {
     }
 
     public Map<String, Object> runIngestion() {
+        LOG.info("Ingestion run started");
+
         List<SourceConfig> sources = sourceConfigurationLoader.loadSources().stream()
                 .filter(this::shouldIngestSource)
                 .toList();
@@ -62,8 +64,10 @@ public class IngestionService {
                 .map(this::ingestSource)
                 .toList();
 
+        String status = globalStatus(sourceSummaries);
+
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("status", "ok");
+        result.put("status", status);
         result.put("sourceCount", sourceSummaries.size());
         result.put("fetchedCount", sum(sourceSummaries, "fetchedCount"));
         result.put("normalizedCount", sum(sourceSummaries, "normalizedCount"));
@@ -77,11 +81,24 @@ public class IngestionService {
         result.put("negativeCount", sum(sourceSummaries, "negativeCount"));
         result.put("neutralCount", sum(sourceSummaries, "neutralCount"));
         result.put("sources", sourceSummaries);
+
+        LOG.info(
+                "Ingestion finished with status {} across {} sources: {} fetched, {} normalized, {} processed, {} indexed",
+                status,
+                sourceSummaries.size(),
+                result.get("fetchedCount"),
+                result.get("normalizedCount"),
+                result.get("processedCount"),
+                result.get("indexedCount")
+        );
+
         return result;
     }
 
     private Map<String, Object> ingestSource(SourceConfig source) {
         try {
+            LOG.info("Source processing started: {}", source.getName());
+
             String rawJson = genericHttpNewsFetcher.fetch(source);
             List<NormalizedArticle> normalizedArticles = genericJsonArticleParser.parse(rawJson, source);
             int fetchedCount = normalizedArticles.size();
@@ -90,9 +107,9 @@ public class IngestionService {
             IndexingSummary indexingSummary = articleIndexer.indexArticles(processedArticles);
 
             LOG.info(
-                    "Fetched {} articles from {}, normalized {} articles, enriched {} articles, indexed {} articles ({} created, {} updated)",
-                    fetchedCount,
+                    "Source {} succeeded: fetched {}, normalized {}, enriched {}, indexed {} ({} created, {} updated)",
                     source.getName(),
+                    fetchedCount,
                     normalizedArticles.size(),
                     processedArticles.size(),
                     indexingSummary.indexedCount(),
@@ -119,9 +136,10 @@ public class IngestionService {
             return sourceSummary(source.getName(), totalResults, fetchedCount, normalizedArticles.size(),
                     processedArticles.size(), metrics);
         } catch (Exception e) {
-            LOG.error("Ingestion run failed for source {}", source.getName(), e);
-            metricsWriter.write(failedMetrics(source.getName()));
-            throw e;
+            String errorMessage = readableError(e);
+            LOG.error("Source {} failed: {}", source.getName(), errorMessage, e);
+            metricsWriter.write(failedMetrics(source.getName(), errorMessage));
+            return failedSourceSummary(source.getName(), errorMessage);
         }
     }
 
@@ -150,7 +168,27 @@ public class IngestionService {
         return result;
     }
 
-    private IngestionRunMetrics failedMetrics(String sourceName) {
+    private Map<String, Object> failedSourceSummary(String sourceName, String errorMessage) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("source", sourceName);
+        result.put("status", "failed");
+        result.put("fetchedCount", 0);
+        result.put("normalizedCount", 0);
+        result.put("processedCount", 0);
+        result.put("embeddedCount", 0);
+        result.put("indexedCount", 0);
+        result.put("createdCount", 0);
+        result.put("updatedCount", 0);
+        result.put("totalResults", 0);
+        result.put("positiveCount", 0);
+        result.put("negativeCount", 0);
+        result.put("neutralCount", 0);
+        result.put("failedRequests", 1);
+        result.put("errorMessage", errorMessage);
+        return result;
+    }
+
+    private IngestionRunMetrics failedMetrics(String sourceName, String errorMessage) {
         return new IngestionRunMetrics(
                 Instant.now(),
                 sourceName,
@@ -167,8 +205,34 @@ public class IngestionService {
                 0,
                 0,
                 0,
-                0
+                0,
+                errorMessage
         );
+    }
+
+    private String globalStatus(List<Map<String, Object>> sourceSummaries) {
+        long successfulSources = sourceSummaries.stream()
+                .filter(summary -> "ok".equals(summary.get("status")))
+                .count();
+
+        if (successfulSources == sourceSummaries.size()) {
+            return "ok";
+        }
+
+        if (successfulSources == 0) {
+            return "failed";
+        }
+
+        return "partial";
+    }
+
+    private String readableError(Exception e) {
+        String message = e.getMessage();
+        if (message == null || message.isBlank()) {
+            return e.getClass().getSimpleName();
+        }
+
+        return message;
     }
 
     private boolean shouldIngestSource(SourceConfig source) {

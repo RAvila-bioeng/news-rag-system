@@ -24,7 +24,8 @@ public record IngestionRunMetrics(
         int updatedCount,
         int positiveCount,
         int negativeCount,
-        int neutralCount
+        int neutralCount,
+        String errorMessage
 ) {
     public static IngestionRunMetrics successfulRun(
             Instant runAt,
@@ -57,7 +58,8 @@ public record IngestionRunMetrics(
                 updatedCount,
                 countSentiment(processedArticles, Sentiment.POSITIVE),
                 countSentiment(processedArticles, Sentiment.NEGATIVE),
-                countSentiment(processedArticles, Sentiment.NEUTRAL)
+                countSentiment(processedArticles, Sentiment.NEUTRAL),
+                null
         );
     }
 

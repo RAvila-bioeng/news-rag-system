@@ -19,6 +19,9 @@ sentiment:
   max-text-chars: ${SENTIMENT_MAX_TEXT_CHARS:3000}
 
 ingestion:
+  http:
+    max-retries: ${INGESTION_HTTP_MAX_RETRIES:3}
+    retry-delay-ms: ${INGESTION_HTTP_RETRY_DELAY_MS:500}
   scheduler:
     enabled: true
     cron: "0 0 8 * * ?"
