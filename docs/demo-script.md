@@ -267,7 +267,27 @@ Expected output conceptually:
 
 Explain that `size` controls how many nearest neighbors are requested, while `minScore` filters weak matches.
 
-### 12. Explain OpenAI Sentiment vs Fallback
+### 12. Open Minimal Demo UI
+
+After the curl-based validation, open the browser at:
+
+```text
+http://localhost:8082/
+```
+
+Use the same search examples from the API validation:
+
+- `technology`
+- `artificial intelligence`
+- `healthcare`
+- `stock market`
+- `cybersecurity`
+
+Expected output conceptually: the page shows the query, result count, sentiment badges, scores, timestamps, sources, and article links when URLs are available.
+
+Explain that this is a minimal static UI served by `search-service`. It calls the existing `/search` endpoint on the same origin and does not call OpenSearch or OpenAI directly from the browser.
+
+### 13. Explain OpenAI Sentiment vs Fallback
 
 Show `.env.example`:
 
@@ -297,7 +317,7 @@ Explain:
 - If OpenAI sentiment fails, the service falls back to the simple local keyword analyzer.
 - The fallback keeps ingestion resilient during demos and local development.
 
-### 13. Explain Partial Failure Test
+### 14. Explain Partial Failure Test
 
 Open `config/sources.yaml` and point to the disabled `Broken Test Source`.
 
@@ -344,7 +364,7 @@ Return `Broken Test Source` to `enabled: false` after the demo. This is a manual
 
 - No chunking yet; each article is one document.
 - No LLM answer generation yet; search returns ranked articles.
-- No frontend yet; interaction is through REST commands and files.
+- The UI is intentionally minimal and only demonstrates semantic search.
 - Result quality depends on external source content and API availability.
 - OpenAI mode requires an API key and can add cost and latency.
 - Search pagination is not implemented yet.
@@ -352,7 +372,7 @@ Return `Broken Test Source` to `enabled: false` after the demo. This is a manual
 
 Recommended next steps:
 
-- Add a minimal UI for ingestion and search.
+- Expand the UI only if the demo needs more than semantic search.
 - Polish final demo examples and screenshots.
 - Add optional pagination.
 - Add Dockerfiles for both Java services.

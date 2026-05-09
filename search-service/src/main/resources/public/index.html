@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nexthink RAG News Search</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="search-panel" aria-labelledby="page-title">
+      <p class="eyebrow">Nexthink technical assignment</p>
+      <h1 id="page-title">RAG News Semantic Search</h1>
+      <p class="intro">
+        Search the articles indexed in OpenSearch using the same embedding flow exposed by the search service.
+      </p>
+
+      <form id="search-form" class="search-form">
+        <label class="field field-query" for="query">
+          <span>Query</span>
+          <input id="query" name="query" type="search" autocomplete="off" placeholder="Search news topics" required>
+        </label>
+
+        <label class="field field-small" for="size">
+          <span>Size</span>
+          <input id="size" name="size" type="number" min="1" max="20" value="5" required>
+        </label>
+
+        <label class="field field-small" for="min-score">
+          <span>Min score</span>
+          <input id="min-score" name="minScore" type="number" min="0" step="0.01" placeholder="Optional">
+        </label>
+
+        <button id="search-button" class="primary-button" type="submit">Search</button>
+      </form>
+
+      <div class="quick-queries" aria-label="Quick queries">
+        <button type="button" data-query="technology">technology</button>
+        <button type="button" data-query="artificial intelligence">artificial intelligence</button>
+        <button type="button" data-query="healthcare">healthcare</button>
+        <button type="button" data-query="stock market">stock market</button>
+        <button type="button" data-query="cybersecurity">cybersecurity</button>
+      </div>
+    </section>
+
+    <section class="status-panel" aria-live="polite">
+      <div id="status" class="status">Enter a query or choose a quick search.</div>
+      <div id="summary" class="summary" hidden></div>
+    </section>
+
+    <section id="results" class="results" aria-label="Search results"></section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

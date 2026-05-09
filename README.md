@@ -456,6 +456,16 @@ Expected response shape:
 }
 ```
 
+### Minimal Demo UI
+
+The search service also serves a small static UI for the final demo step. Make sure OpenSearch has indexed documents first, then run `search-service`:
+
+```powershell
+mvn -f search-service/pom.xml mn:run
+```
+
+Open `http://localhost:8082/` in a browser and search with the form or quick query buttons. The page calls `GET /search?q=...&size=...&minScore=...` on the same origin, so it does not need CORS, OpenSearch browser access, or a frontend build step.
+
 ### Run Tests
 
 ```powershell
@@ -484,11 +494,13 @@ curl.exe "http://localhost:8082/search?q=technology&size=5"
 
 Run the long-lived service commands in separate terminals.
 
+After the curl validation, open `http://localhost:8082/` to show the minimal semantic search UI.
+
 ## Limitations
 
 - No chunking yet. Each article is stored as one full document.
 - No LLM answer generation yet. The system retrieves relevant articles but does not synthesize an answer.
-- Simple UI is pending. The current interface is REST plus files.
+- The UI is intentionally minimal and only covers semantic search over already indexed documents.
 - API result quality depends on the external sources and their available article text.
 - OpenAI mode requires an API key and may add cost and latency.
 - The generic source system supports common JSON GET APIs, but not every provider shape.
@@ -497,7 +509,7 @@ Run the long-lived service commands in separate terminals.
 
 ## Roadmap
 
-- Add a minimal UI for triggering ingestion and running searches.
+- Expand the UI only if the demo needs more than semantic search.
 - Polish final demo data, commands, and screenshots.
 - Add optional pagination to the search API.
 - Add Dockerfiles for the Java services.

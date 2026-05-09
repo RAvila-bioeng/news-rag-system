@@ -6,6 +6,12 @@ micronaut:
   serde:
     serialization:
       inclusion: NON_NULL
+  router:
+    static-resources:
+      default:
+        enabled: true
+        mapping: /**
+        paths: classpath:public
 
 opensearch:
   url: http://localhost:9200
