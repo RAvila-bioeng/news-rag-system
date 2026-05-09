@@ -78,8 +78,8 @@ function validateInputs() {
 
   if (minScoreValue !== "") {
     const minScore = Number(minScoreValue);
-    if (!Number.isFinite(minScore) || minScore < 0) {
-      return "Min score must be empty or greater than or equal to 0.";
+    if (!Number.isFinite(minScore) || minScore < 0 || minScore > 1) {
+      return "Min score must be empty or between 0 and 1.";
     }
   }
 
